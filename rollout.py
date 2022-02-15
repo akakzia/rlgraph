@@ -4,6 +4,16 @@ import numpy as np
 def is_success(ag, g):
     return (ag == g).all()
 
+def at_least_one_fallen(observation, n):
+    """ Given a observation, returns true if at least one object has fallen """
+    dim_body = 10
+    dim_object = 15
+    obs_objects = np.array([observation[dim_body + dim_object * i: dim_body + dim_object * (i + 1)] for i in range(n)])
+    obs_z = obs_objects[:, 2]
+
+    return (obs_z < 0.4).any()
+
+
 
 class RolloutWorker:
     def __init__(self, env, policy, goal_sampler, args):
@@ -17,8 +27,12 @@ class RolloutWorker:
     def generate_rollout(self, goals, true_eval, animated=False):
 
         episodes = []
+        # Reset only once for all the goals in cycle if not performing evaluation
+        if not true_eval:
+            observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]))
         for i in range(goals.shape[0]):
-            observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
+            if true_eval:
+                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
             obs = observation['observation']
             ag = observation['achieved_goal']
             ag_bin = observation['achieved_goal_binary']
@@ -74,6 +88,11 @@ class RolloutWorker:
 
 
             episodes.append(episode)
+
+            # if not eval, make sure that no block has fallen 
+            fallen = at_least_one_fallen(obs, self.args.n_blocks)
+            if not true_eval and fallen:
+                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
 
         return episodes
 
