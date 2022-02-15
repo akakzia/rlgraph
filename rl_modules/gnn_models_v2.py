@@ -11,7 +11,7 @@ epsilon = 1e-6
 
 
 class GnnCritic(nn.Module):
-    def __init__(self, nb_objects, edges, incoming_edges, predicate_ids, aggregation, readout, dim_body, dim_object, dim_mp_input,
+    def __init__(self, nb_objects, edges, incoming_edges, predicate_ids, aggregation, dim_body, dim_object, dim_mp_input,
                  dim_mp_output, dim_phi_critic_input, dim_phi_critic_output, dim_rho_critic_input, dim_rho_critic_output):
         super(GnnCritic, self).__init__()
 
@@ -22,7 +22,6 @@ class GnnCritic(nn.Module):
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
         self.aggregation = aggregation
-        self.readout = readout
 
         self.mp_critic = GnnMessagePassing(dim_mp_input, dim_mp_output)
         self.phi_critic = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
@@ -54,20 +53,14 @@ class GnnCritic(nn.Module):
             raise NotImplementedError
 
         output_phi_critic_1, output_phi_critic_2 = self.phi_critic(inp)
-        if self.readout == 'sum':
-            output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
-            output_self_attention_1 = self.self_attention(output_phi_critic_1)
-            output_self_attention_1 = output_self_attention_1.sum(dim=1)
+        output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
+        output_self_attention_1 = self.self_attention(output_phi_critic_1)
+        output_self_attention_1 = output_self_attention_1.sum(dim=1)
 
-            output_phi_critic_2 = output_phi_critic_2.permute(1, 0, 2)
-            output_self_attention_2 = self.self_attention(output_phi_critic_2)
-            output_self_attention_2 = output_self_attention_2.sum(dim=1)
-        elif self.readout == 'mean':
-            output_phi_critic_1 = output_phi_critic_1.mean(dim=0)
-            output_phi_critic_2 = output_phi_critic_2.mean(dim=0)
-        elif self.readout == 'max':
-            output_phi_critic_1 = output_phi_critic_1.max(dim=0).values
-            output_phi_critic_2 = output_phi_critic_2.max(dim=0).values
+        output_phi_critic_2 = output_phi_critic_2.permute(1, 0, 2)
+        output_self_attention_2 = self.self_attention(output_phi_critic_2)
+        output_self_attention_2 = output_self_attention_2.sum(dim=1)
+
         q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_self_attention_1, output_self_attention_2)
         return q1_pi_tensor, q2_pi_tensor
 
@@ -89,7 +82,7 @@ class GnnCritic(nn.Module):
 
 
 class GnnActor(nn.Module):
-    def __init__(self, nb_objects, incoming_edges, aggregation, readout, dim_body, dim_object, dim_phi_actor_input, dim_phi_actor_output, dim_rho_actor_input,
+    def __init__(self, nb_objects, incoming_edges, aggregation, dim_body, dim_object, dim_phi_actor_input, dim_phi_actor_output, dim_rho_actor_input,
                  dim_rho_actor_output):
         super(GnnActor, self).__init__()
 
@@ -98,7 +91,6 @@ class GnnActor(nn.Module):
         self.dim_object = dim_object
 
         self.aggregation = aggregation
-        self.readout = readout
 
         self.phi_actor = PhiActorDeepSet(dim_phi_actor_input, 256, dim_phi_actor_output)
         self.self_attention = SelfAttention(dim_phi_actor_output, 1) # test 1 attention heads
@@ -127,16 +119,9 @@ class GnnActor(nn.Module):
             raise NotImplementedError
 
         output_phi_actor = self.phi_actor(inp)
-        if self.readout == 'sum':
-            output_phi_actor = output_phi_actor.permute(1, 0, 2)
-            output_self_attention = self.self_attention(output_phi_actor)
-            output_self_attention = output_self_attention.sum(dim=1)
-        elif self.readout == 'mean':
-            output_phi_actor = output_phi_actor.mean(dim=0)
-        elif self.readout == 'max':
-            output_phi_actor = output_phi_actor.max(dim=0).values
-        else:
-            raise NotImplementedError
+        output_phi_actor = output_phi_actor.permute(1, 0, 2)
+        output_self_attention = self.self_attention(output_phi_actor)
+        output_self_attention = output_self_attention.sum(dim=1)
 
         mean, logstd = self.rho_actor(output_self_attention)
         return mean, logstd
@@ -164,7 +149,6 @@ class GnnSemantic:
         self.nb_objects = args.n_blocks
 
         self.aggregation = args.aggregation_fct
-        self.readout = args.readout_fct
 
         self.q1_pi_tensor = None
         self.q2_pi_tensor = None
@@ -190,12 +174,12 @@ class GnnSemantic:
         dim_rho_critic_output = 1
 
         self.critic = GnnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids, self.aggregation,
-                                self.readout, self.dim_body, self.dim_object, dim_mp_input, dim_mp_output,
+                                self.dim_body, self.dim_object, dim_mp_input, dim_mp_output,
                                 dim_phi_critic_input, dim_phi_critic_output, dim_rho_critic_input, dim_rho_critic_output)
         self.critic_target = GnnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids, self.aggregation,
-                                       self.readout, self.dim_body, self.dim_object, dim_mp_input, dim_mp_output,
+                                       self.dim_body, self.dim_object, dim_mp_input, dim_mp_output,
                                        dim_phi_critic_input, dim_phi_critic_output, dim_rho_critic_input, dim_rho_critic_output)
-        self.actor = GnnActor(self.nb_objects, self.incoming_edges, self.aggregation, self.readout, self.dim_body, self.dim_object,
+        self.actor = GnnActor(self.nb_objects, self.incoming_edges, self.aggregation, self.dim_body, self.dim_object,
                               dim_phi_actor_input, dim_phi_actor_output, dim_rho_actor_input, dim_rho_actor_output)
 
     def policy_forward_pass(self, obs, ag, g, no_noise=False):

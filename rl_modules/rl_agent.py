@@ -1,12 +1,11 @@
 import torch
 import numpy as np
 from mpi_utils.mpi_utils import sync_networks
-from rl_modules.replay_buffer import MultiBuffer
+from rl_modules.replay_buffer import ReplayBuffer
 from rl_modules.networks import QNetworkFlat, GaussianPolicyFlat
 from mpi_utils.normalizer import normalizer
 from her_modules.her import her_sampler
 from updates import update_flat, update_deepsets
-from utils import id_to_language
 
 
 """
@@ -37,6 +36,11 @@ class RLAgent:
         if self.architecture == 'flat':
             self.actor_network = GaussianPolicyFlat(self.env_params)
             self.critic_network = QNetworkFlat(self.env_params)
+            # if use GPU
+            if self.args.cuda:
+                self.actor_network.cuda()
+                self.critic_network.cuda()
+                self.critic_target_network.cuda()
             # sync the networks across the CPUs
             sync_networks(self.actor_network)
             sync_networks(self.critic_network)
@@ -49,22 +53,18 @@ class RLAgent:
             # create the optimizer
             self.policy_optim = torch.optim.Adam(self.actor_network.parameters(), lr=self.args.lr_actor)
             self.critic_optim = torch.optim.Adam(self.critic_network.parameters(), lr=self.args.lr_critic)
-
-            # if use GPU
-            if self.args.cuda:
-                self.actor_network.cuda()
-                self.critic_network.cuda()
-                self.critic_target_network.cuda()
         elif self.architecture == 'deepsets':
-            if args.algo == 'language':
-                from rl_modules.language_models import DeepSetLanguage
-                self.model = DeepSetLanguage(self.env_params, args)
-            elif args.algo == 'continuous':
+            if args.algo == 'continuous':
                 from rl_modules.continuous_models import DeepSetContinuous
                 self.model = DeepSetContinuous(self.env_params, args)
             else:
                 from rl_modules.semantic_models import DeepSetSemantic
                 self.model = DeepSetSemantic(self.env_params, args)
+            # if use GPU
+            if self.args.cuda:
+                self.model.actor.cuda()
+                self.model.critic.cuda()
+                self.model.critic_target.cuda()
             # sync the networks across the CPUs
             sync_networks(self.model.critic)
             sync_networks(self.model.actor)
@@ -76,11 +76,6 @@ class RLAgent:
                                                  lr=self.args.lr_actor)
             self.critic_optim = torch.optim.Adam(list(self.model.critic.parameters()),
                                                  lr=self.args.lr_critic)
-            # if use GPU
-            if self.args.cuda:
-                self.model.actor.cuda()
-                self.model.critic.cuda()
-                self.model.critic_target.cuda()
         elif self.architecture == 'gnn':
             if self.args.variant == 2:
                 from rl_modules.gnn_models_v2 import GnnSemantic
@@ -99,12 +94,8 @@ class RLAgent:
             sync_networks(self.model.critic_target)
 
             # create the optimizer
-            self.policy_optim = torch.optim.Adam(list(self.model.actor.parameters()),
-                                                 lr=self.args.lr_actor)
-            self.critic_optim = torch.optim.Adam(list(self.model.critic.parameters()),
-                                                 lr=self.args.lr_critic)
-            
-
+            self.policy_optim = torch.optim.Adam(list(self.model.actor.parameters()), lr=self.args.lr_actor)
+            self.critic_optim = torch.optim.Adam(list(self.model.critic.parameters()), lr=self.args.lr_critic)
         else:
             raise NotImplementedError
 
@@ -123,52 +114,29 @@ class RLAgent:
             self.continuous_goals = True
         else:
             self.continuous_goals = False
-        if args.algo == 'language':
-            self.language = True
-        else:
-            self.language = False
         self.her_module = her_sampler(self.args, compute_rew)
 
         # create the replay buffer
-        self.buffer = MultiBuffer(env_params=self.env_params,
+        self.buffer = ReplayBuffer(env_params=self.env_params,
                                   buffer_size=self.args.buffer_size,
                                   sample_func=self.her_module.sample_her_transitions,
-                                  multi_head=self.args.multihead_buffer if not self.language else False,
                                   goal_sampler=self.goal_sampler
                                   )
 
-    def act(self, obs, ag, g, mask, no_noise, language_goal=None):
-        # apply mask
-        if mask is not None:
-            if self.args.mask_application == 'hindsight':
-                g = g * (1 - mask) + ag * mask
-            elif self.args.mask_application == 'initial':
-                g = g * (1 - mask) + ag * mask
-            elif self.args.mask_application == 'opaque':
-                g = g * (1 - mask) - 10 * mask
-            else:
-                raise NotImplementedError
+    def act(self, obs, ag, g, no_noise):
         with torch.no_grad():
             # normalize policy inputs
             obs_norm = self.o_norm.normalize(obs)
             ag_norm = torch.tensor(self.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
+            g_norm = torch.tensor(self.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
 
-            if self.language:
-                g_norm = g
-            else:
-                g_norm = torch.tensor(self.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
             if self.architecture == 'gnn':
                 obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
                 if self.args.cuda:
                     obs_tensor = obs_tensor.cuda()
                     g_norm = g_norm.cuda()
                     ag_norm = ag_norm.cuda()
-                if self.args.algo == 'language':
-                    self.model.policy_forward_pass(obs_tensor, no_noise=no_noise, language_goal=language_goal)
-                elif self.args.algo == 'continuous':
-                    self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
-                else:
-                    self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
+                self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
                 if self.args.cuda:
                     action = self.model.pi_tensor.cpu().numpy()[0]
                 else:
@@ -216,11 +184,9 @@ class RLAgent:
 
     # update the normalizer
     def _update_normalizer(self, episode):
-
         mb_obs = episode['obs']
         mb_ag = episode['ag']
         mb_g = episode['g']
-        mb_masks = episode['masks']
         mb_actions = episode['act']
         mb_obs_next = mb_obs[1:, :]
         mb_ag_next = mb_ag[1:, :]
@@ -230,15 +196,10 @@ class RLAgent:
         buffer_temp = {'obs': np.expand_dims(mb_obs, 0),
                        'ag': np.expand_dims(mb_ag, 0),
                        'g': np.expand_dims(mb_g, 0),
-                       'masks': np.expand_dims(mb_masks, 0),
                        'actions': np.expand_dims(mb_actions, 0),
                        'obs_next': np.expand_dims(mb_obs_next, 0),
                        'ag_next': np.expand_dims(mb_ag_next, 0),
                        }
-        # if 'language_goal' in episode.keys():
-        #     buffer_temp['language_goal'] = np.array([episode['language_goal'] for _ in range(mb_g.shape[0])], dtype='object').reshape(1, -1)
-        if 'lg_ids' in episode.keys():
-            buffer_temp['lg_ids'] = np.expand_dims(episode['lg_ids'], 0)
 
         transitions = self.her_module.sample_her_transitions(buffer_temp, num_transitions)
         obs, g = transitions['obs'], transitions['g']
@@ -265,7 +226,6 @@ class RLAgent:
 
     # update the network
     def _update_network(self):
-
         # sample from buffer, this is done with LP is multi-head is true
         transitions = self.buffer.sample(self.args.batch_size)
 
@@ -279,30 +239,17 @@ class RLAgent:
 
         # apply normalization
         obs_norm = self.o_norm.normalize(transitions['obs'])
-        if self.language:
-            g_norm = transitions['g']
-            lg_ids = transitions['lg_ids']
-            language_goals = np.array([id_to_language[lg_id] for lg_id in lg_ids])
-            # language_goals = transitions['language_goal']
-        else:
-            g_norm = self.g_norm.normalize(transitions['g'])
-            language_goals = None
+        g_norm = self.g_norm.normalize(transitions['g'])
         ag_norm = self.g_norm.normalize(transitions['ag'])
         obs_next_norm = self.o_norm.normalize(transitions['obs_next'])
         ag_next_norm = self.g_norm.normalize(transitions['ag_next'])
 
-        anchor_g = transitions['g']
-
         if self.architecture == 'flat':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_flat(self.actor_network, self.critic_network,
-                                                                           self.critic_target_network, self.policy_optim, self.critic_optim,
-                                                                           self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
-                                                                           obs_norm, ag_norm, g_norm, obs_next_norm, actions, rewards, self.args)
+            update_flat(self.actor_network, self.critic_network,self.critic_target_network, self.policy_optim, self.critic_optim, self.alpha,
+             self.log_alpha, self.target_entropy, self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm, actions, rewards, self.args)
         elif self.architecture == 'gnn':
-            critic_1_loss, critic_2_loss, actor_loss, alpha_loss, alpha_tlogs = update_deepsets(self.model, self.language,
-                                                                               self.policy_optim, self.critic_optim, self.alpha, self.log_alpha,
-                                                                               self.target_entropy, self.alpha_optim, obs_norm, ag_norm, g_norm,
-                                                                               obs_next_norm, ag_next_norm, anchor_g, actions, rewards, language_goals, self.args)
+            update_deepsets(self.model, self.policy_optim, self.critic_optim, self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
+             obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, actions, rewards, self.args)
         else:
             raise NotImplementedError
 
@@ -336,7 +283,7 @@ class RLAgent:
             o_mean, o_std, g_mean, g_std, actor, critic = torch.load(model_path, map_location=lambda storage, loc: storage)
             self.model.actor.load_state_dict(actor)
             self.model.critic.load_state_dict(critic)
-            # self.actor_network.eval()
+            self.model.actor.eval()
             self.o_norm.mean = o_mean
             self.o_norm.std = o_std
             self.g_norm.mean = g_mean

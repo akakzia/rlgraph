@@ -1,11 +1,6 @@
-from collections import deque
 import numpy as np
 from utils import get_idxs_per_relation
 from mpi4py import MPI
-import os
-import pickle
-import pandas as pd
-from mpi_utils import logger
 
 
 ALL_MASKS = True
@@ -15,23 +10,9 @@ class GoalSampler:
     def __init__(self, args):
         self.num_rollouts_per_mpi = args.num_rollouts_per_mpi
         self.rank = MPI.COMM_WORLD.Get_rank()
-        self.use_masks = args.masks
-        self.mask_application = args.mask_application
 
         self.goal_dim = args.env_params['goal']
         self.relation_ids = get_idxs_per_relation(n=args.n_blocks)
-        # if ALL_MASKS:
-        #     self.masks_list = [np.array([1, 0, 0, 1, 0, 1, 0, 0, 0]), np.array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
-        #                        np.array([0, 0, 1, 0, 0, 0, 1, 0, 1]),
-        #                        np.array([1, 1, 0, 1, 1, 1, 0, 1, 0]), np.array([1, 0, 1, 1, 0, 1, 1, 0, 1]),
-        #                        np.array([0, 1, 1, 0, 1, 0, 1, 1, 1]),
-        #                        np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])]
-        # # Test only simple masks in training
-        # else:
-        #     self.masks_list = [np.array([1, 1, 0, 1, 1, 1, 1, 0, 0]), np.array([1, 0, 1, 1, 1, 0, 0, 1, 1]),
-        #                        np.array([0, 1, 1, 0, 0, 1, 1, 1, 1])]
-
-        # self.n_masks = len(self.masks_list)
 
         self.discovered_goals = []
         self.discovered_goals_str = []
@@ -62,23 +43,14 @@ class GoalSampler:
         """
         if evaluation and len(self.discovered_goals) > 0:
             goals = np.random.choice(self.discovered_goals, size=self.num_rollouts_per_mpi)
-            masks = np.zeros((n_goals, self.goal_dim))
-            self_eval = False
         else:
             if len(self.discovered_goals) == 0:
                 goals = np.random.choice([-1., 1.], size=(n_goals, self.goal_dim))
-                masks = np.zeros((n_goals, self.goal_dim))
-                # masks = np.random.choice([0., 1.], size=(n_goals, self.goal_dim))
-                self_eval = False
-            # if no curriculum learning
             else:
                 # sample uniformly from discovered goals
                 goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
                 goals = np.array(self.discovered_goals)[goal_ids]
-                masks = self.sample_masks(n_goals)
-                # masks = np.array(self.masks_list)[np.random.choice(range(self.n_masks), size=n_goals)]
-                self_eval = False
-        return goals, masks, self_eval
+        return goals
 
     def update(self, episodes, t):
         """
@@ -99,50 +71,7 @@ class GoalSampler:
 
         self.sync()
 
-        # Apply masks
-        for e in episodes:
-            if self.mask_application == 'hindsight':
-                e['g'] = e['g'] * (1 - e['masks'][0]) + e['ag'][:-1] * e['masks'][0]
-            elif self.mask_application == 'initial':
-                e['g'] = e['g'] * (1 - e['masks'][0]) + e['ag'][0] * e['masks'][0]
-            elif self.mask_application == 'opaque':
-                e['g'] = e['g'] * (1 - e['masks'][0]) - 10 * e['masks'][0]
-            else:
-                raise NotImplementedError
-
         return episodes
-
-    def generate_eval_goals(self):
-        """ Generates a set of goals for evaluation. This set comprises :
-        - One relation with close == True .
-        - One relation with above == True
-        - Two relations with close == True in one of them
-        - Two relations with close == True in both of them
-        - Two relations with above == True in one and close == False in the other
-        - Two relations with above == True in one and close == True in the other
-        - Two relations with above == True in one and above == True in the other
-        - Three whole relations for the 7 above cases"""
-        if self.use_masks:
-            masks = np.array([np.array([0, 1, 1, 0, 1, 0, 1, 1, 1]), np.array([0, 1, 1, 0, 1, 0, 1, 1, 1]),
-                              np.array([0, 0, 1, 0, 0, 0, 1, 0, 1]), np.array([0, 0, 1, 0, 0, 0, 1, 0, 1]),
-                              np.array([0, 0, 1, 0, 0, 0, 1, 0, 1]), np.array([0, 0, 1, 0, 0, 0, 1, 0, 1]),
-                              np.array([0, 1, 0, 0, 1, 0, 0, 1, 0]),
-                              np.zeros(9), np.zeros(9), np.zeros(9), np.zeros(9), np.zeros(9)])
-        else:
-            masks = np.zeros((12, 9))
-        gs = np.array([np.array([1., -10., -10., -1., -10., -1., -10., -10., -10.]), np.array([1., -10., -10., 1., -10., -1., -10., -10., -10.]),
-
-                       np.array([1., -1., -10., -1., -1., -1., -10., -1., -10.]), np.array([1., 1., -10., -1., -1., -1., -10., -1., -10.]),
-                       np.array([1., -1., -10., -1., -1., 1., -10., -1., -10.]), np.array([1., 1., -10., -1., 1., -1., -10., -1., -10.]),
-                       np.array([1., -10., 1., 1., -10., -1., 1., -10., -1.]),
-
-                       np.array([1., -1., -1., -1., -1., -1., -1., -1., -1.]), np.array([1., -1., -1., 1., -1., -1., -1., -1., -1.]),
-
-                       np.array([1., 1., -1., -1., -1., -1., -1., -1., -1.]),
-                       np.array([1., 1., 1., -1., -1., 1., -1., -1., -1.]),
-                       np.array([1., -1., 1., 1., -1., -1., 1., -1., -1.])
-                       ])
-        return gs, masks
 
     def sync(self):
         self.discovered_goals = MPI.COMM_WORLD.bcast(self.discovered_goals, root=0)
@@ -181,5 +110,3 @@ class GoalSampler:
         for g_id in np.arange(1, len(av_res) + 1):
             self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
             self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])
-            # self.stats['#Rew_{}'.format(g_id)].append(self.rew_counters[oracle_id])
-            # self.stats['#Target_{}'.format(g_id)].append(self.target_counters[oracle_id])

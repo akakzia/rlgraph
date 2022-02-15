@@ -8,12 +8,10 @@ from arguments import get_args
 from rl_modules.rl_agent import RLAgent
 import random
 from rollout import RolloutWorker
-from temporary_lg_goal_sampler import LanguageGoalSampler
 from goal_sampler import GoalSampler
-from utils import init_storage, get_instruction, get_eval_goals
+from utils import init_storage, get_eval_goals
 import time
 from mpi_utils import logger
-from language.build_dataset import sentence_from_configuration
 
 def get_env_params(env):
     obs = env.reset()
@@ -52,7 +50,6 @@ def launch(args):
 
     args.env_params = get_env_params(env)
 
-    language_goal = None
     goal_sampler = GoalSampler(args)
 
     # Initialize RL Agent
@@ -87,27 +84,14 @@ def launch(args):
 
             # Sample goals
             t_i = time.time()
-            goals, masks, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
-            if args.algo == 'language':
-                language_goal_ep = np.random.choice(language_goal, size=args.num_rollouts_per_mpi)
-            else:
-                language_goal_ep = None
+            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
             time_dict['goal_sampler'] += time.time() - t_i
-
-            # Control biased initializations
-            if epoch < args.start_biased_init:
-                biased_init = False
-            else:
-                biased_init = args.biased_init
 
             # Environment interactions
             t_i = time.time()
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
-                                                       masks=masks,  # list of masks to be applied
-                                                       self_eval=self_eval,  # whether the agent performs self-evaluations
                                                        true_eval=False,  # these are not offline evaluation episodes
-                                                       biased_init=biased_init,  # whether initializations should be biased.
-                                                       language_goal=language_goal_ep)   # ignore if no language used
+                                                      )
             time_dict['rollout'] += time.time() - t_i
 
             # Goal Sampler updates
@@ -152,13 +136,9 @@ def launch(args):
                 eval_goal = get_eval_goals(instruction, n=args.n_blocks)
                 eval_goals.append(eval_goal.squeeze(0))
             eval_goals = np.array(eval_goals)
-            eval_masks = np.array(np.zeros((eval_goals.shape[0], args.n_blocks * (args.n_blocks - 1) * 3 // 2)))
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
-                                                       masks=eval_masks,
-                                                       self_eval=True,  # this parameter is overridden by true_eval
                                                        true_eval=True,  # this is offline evaluations
-                                                       biased_init=False,
-                                                       language_goal=language_goal)
+                                                       )
 
             results = np.array([e['success'][-1].astype(np.float32) for e in episodes])
             rewards = np.array([e['rewards'][-1] for e in episodes])

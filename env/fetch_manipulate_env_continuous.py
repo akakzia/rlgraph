@@ -3,7 +3,6 @@ import os
 import itertools
 
 from env import rotations, robot_env, utils
-from utils import generate_goals
 
 
 def goal_distance(goal_a, goal_b):
@@ -83,13 +82,6 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         self.location_record_max_steps = 2000
 
         self.object_inds = [list(range(10 + i * 15, 10 + (i + 1) * 15)) for i in range(self.num_blocks)]
-
-        buckets = generate_goals()
-        valid_goals = []
-        for k in buckets.keys():
-            valid_goals += buckets[k]
-        self.valid_goals = np.array(valid_goals)
-        self.valid_str = [str(vg) for vg in self.valid_goals]
 
         super(FetchManipulateEnvContinuous, self).__init__(
             model_path=model_path, n_substeps=n_substeps, n_actions=4,
