@@ -22,16 +22,17 @@ class RolloutWorker:
         self.policy = policy
         self.env_params = args.env_params
         self.goal_sampler = goal_sampler
+        self.continuous = args.algo == 'continuous'
         self.args = args
 
     def generate_rollout(self, goals, true_eval, animated=False):
 
         episodes = []
         # Reset only once for all the goals in cycle if not performing evaluation
-        if not true_eval:
+        if not true_eval and not self.continuous:
             observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]))
         for i in range(goals.shape[0]):
-            if true_eval:
+            if true_eval or self.continuous:
                 observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
             obs = observation['observation']
             ag = observation['achieved_goal']

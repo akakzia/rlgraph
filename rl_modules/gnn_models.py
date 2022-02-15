@@ -149,8 +149,17 @@ class GnnSemantic:
 
         # Process indexes for graph construction
         self.edges, self.incoming_edges, self.predicate_ids = get_graph_structure(self.nb_objects)
+        if args.algo == 'continuous':
+            goal_ids_per_object = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11], [12, 13, 14]]
+            perm = permutations(np.arange(self.nb_objects), 2)
+            self.predicate_ids = []
+            for p in perm:
+                self.predicate_ids.append(goal_ids_per_object[p[0]] + goal_ids_per_object[p[1]])
 
-        dim_mp_input = 6 + 2  # 2 * nb_position_dimensions + nb_predicates
+        if args.algo == 'semantic':
+            dim_mp_input = 6 + 2  # 2 * nb_position_dimensions + nb_predicates
+        else: 
+            dim_mp_input = 6 + 6 # 2*(positions+goal)
         dim_mp_output = 3 * dim_mp_input
 
         dim_phi_actor_input = self.dim_body + self.dim_object + dim_mp_output

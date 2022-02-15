@@ -17,24 +17,9 @@ class GoalSampler:
         self.discovered_goals = []
         self.discovered_goals_str = []
 
-        self.init_stats()
+        self.continuous = args.algo == 'continuous'
 
-    def sample_masks(self, n):
-        """Samples n masks uniformly"""
-        if not self.use_masks:
-            # No masks
-            return np.zeros((n, self.goal_dim))
-        masks = np.zeros((n, self.goal_dim))
-        # Select number of masks to apply per goal
-        n_masks = np.random.randint(self.relation_ids.shape[0], size=n)
-        # Get idxs to be masked
-        relations_to_mask = [np.random.choice(np.arange(self.relation_ids.shape[0]), size=i, replace=False) for i in n_masks]
-        re = [np.concatenate(self.relation_ids[r]) if self.relation_ids[r].shape[0] > 0 else None for r in relations_to_mask]
-        # apply masks
-        for mask, ids_to_mask in zip(masks, re):
-            if ids_to_mask is not None:
-                mask[ids_to_mask] = 1
-        return masks
+        self.init_stats()
 
     def sample_goal(self, n_goals, evaluation):
         """
@@ -88,9 +73,10 @@ class GoalSampler:
             n = 12
         else:
             n = 6
-        for i in np.arange(1, n+1):
-            self.stats['Eval_SR_{}'.format(i)] = []
-            self.stats['Av_Rew_{}'.format(i)] = []
+        if not self.continuous:
+            for i in np.arange(1, n+1):
+                self.stats['Eval_SR_{}'.format(i)] = []
+                self.stats['Av_Rew_{}'.format(i)] = []
         self.stats['epoch'] = []
         self.stats['episodes'] = []
         self.stats['global_sr'] = []
@@ -107,6 +93,7 @@ class GoalSampler:
         for k in time_dict.keys():
             self.stats['t_{}'.format(k)].append(time_dict[k])
         self.stats['nb_discovered'].append(len(self.discovered_goals))
-        for g_id in np.arange(1, len(av_res) + 1):
-            self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
-            self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])
+        if not self.continuous:
+            for g_id in np.arange(1, len(av_res) + 1):
+                self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
+                self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])

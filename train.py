@@ -31,7 +31,10 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
-    args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+    if args.algo == 'semantic':
+        args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+    else:
+        args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -96,7 +99,8 @@ def launch(args):
 
             # Goal Sampler updates
             t_i = time.time()
-            episodes = goal_sampler.update(episodes, episode_count)
+            if args.algo == 'semantic':
+                episodes = goal_sampler.update(episodes, episode_count)
             time_dict['gs_update'] += time.time() - t_i
 
             # Storing episodes
@@ -132,6 +136,8 @@ def launch(args):
                                 'mixed_2_3', 'trapeze_2_3', 'stack_4', 'stack_5']
             else:
                 raise NotImplementedError
+            if args.algo == 'continuous':
+                instructions = ['close_1'] # doesn't matter which instruction given in continuous
             for instruction in instructions:
                 eval_goal = get_eval_goals(instruction, n=args.n_blocks)
                 eval_goals.append(eval_goal.squeeze(0))

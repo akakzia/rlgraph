@@ -32,3 +32,11 @@ register(id='FetchManipulate5Objects-v0',
                  'model_path': 'fetch/stack5.xml'
                  },
          max_episode_steps=200,)
+
+register(id='FetchManipulate5ObjectsContinuous-v0',
+         entry_point='env.envs:FetchManipulateEnvContinuous',
+         kwargs={'reward_type': 'sparse',
+                 'num_blocks': 5,
+                 'model_path': 'fetch/stack5_with_targets.xml'
+                 },
+         max_episode_steps=200,)
