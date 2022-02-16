@@ -60,6 +60,8 @@ class RLAgent:
                 from rl_modules.gnn_models_v3 import GnnSemantic
             elif self.architecture == 'relation_network':
                 from rl_modules.rn_models import GnnSemantic
+            elif self.architecture == 'deep_sets':
+                from rl_modules.deepsets_models import GnnSemantic
             else:
                 raise NotImplementedError
 
