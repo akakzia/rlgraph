@@ -58,6 +58,8 @@ class RLAgent:
                 from rl_modules.gnn_models_v2 import GnnSemantic
             elif self.architecture == 'full_gn':
                 from rl_modules.gnn_models_v3 import GnnSemantic
+            elif self.architecture == 'relation_network':
+                from rl_modules.rn_models import GnnSemantic
             else:
                 raise NotImplementedError
 
