@@ -34,52 +34,37 @@ class RLAgent:
         self.architecture = self.args.architecture
 
         if self.architecture == 'flat':
-            self.actor_network = GaussianPolicyFlat(self.env_params)
-            self.critic_network = QNetworkFlat(self.env_params)
-            # if use GPU
-            if self.args.cuda:
-                self.actor_network.cuda()
-                self.critic_network.cuda()
-                self.critic_target_network.cuda()
-            # sync the networks across the CPUs
-            sync_networks(self.actor_network)
-            sync_networks(self.critic_network)
-
-            # build up the target network
-            self.critic_target_network = QNetworkFlat(self.env_params)
-            hard_update(self.critic_target_network, self.critic_network)
-            sync_networks(self.critic_target_network)
-
-            # create the optimizer
-            self.policy_optim = torch.optim.Adam(self.actor_network.parameters(), lr=self.args.lr_actor)
-            self.critic_optim = torch.optim.Adam(self.critic_network.parameters(), lr=self.args.lr_critic)
+            from rl_modules.flat_models import FlatSemantic
+            self.model = FlatSemantic(self.env_params)
+        elif self.architecture == 'interaction_network':
+            from rl_modules.interaction_models import InSemantic
+            self.model = InSemantic(self.env_params, args)
+        elif self.architecture == 'full_gn':
+            from rl_modules.gn_models import GnSemantic
+            self.model = GnSemantic(self.env_params, args)
+        elif self.architecture == 'relation_network':
+            from rl_modules.rn_models import RnSemantic
+            self.model = RnSemantic(self.env_params, args)
+        elif self.architecture == 'deep_sets':
+            from rl_modules.deepsets_models import DsSemantic
+            self.model = DsSemantic(self.env_params, args)
         else:
-            if self.architecture == 'interaction_network':
-                from rl_modules.gnn_models_v2 import GnnSemantic
-            elif self.architecture == 'full_gn':
-                from rl_modules.gnn_models_v3 import GnnSemantic
-            elif self.architecture == 'relation_network':
-                from rl_modules.rn_models import GnnSemantic
-            elif self.architecture == 'deep_sets':
-                from rl_modules.deepsets_models import GnnSemantic
-            else:
-                raise NotImplementedError
+            raise NotImplementedError
 
-            self.model = GnnSemantic(self.env_params, args)
-            # if use GPU
-            if self.args.cuda:
-                self.model.actor.cuda()
-                self.model.critic.cuda()
-                self.model.critic_target.cuda()
-            # sync the networks across the CPUs
-            sync_networks(self.model.critic)
-            sync_networks(self.model.actor)
-            hard_update(self.model.critic_target, self.model.critic)
-            sync_networks(self.model.critic_target)
+        # if use GPU
+        if self.args.cuda:
+            self.model.actor.cuda()
+            self.model.critic.cuda()
+            self.model.critic_target.cuda()
+        # sync the networks across the CPUs
+        sync_networks(self.model.critic)
+        sync_networks(self.model.actor)
+        hard_update(self.model.critic_target, self.model.critic)
+        sync_networks(self.model.critic_target)
 
-            # create the optimizer
-            self.policy_optim = torch.optim.Adam(list(self.model.actor.parameters()), lr=self.args.lr_actor)
-            self.critic_optim = torch.optim.Adam(list(self.model.critic.parameters()), lr=self.args.lr_critic)
+        # create the optimizer
+        self.policy_optim = torch.optim.Adam(list(self.model.actor.parameters()), lr=self.args.lr_actor)
+        self.critic_optim = torch.optim.Adam(list(self.model.critic.parameters()), lr=self.args.lr_critic)
         
         # create the normalizer
         self.o_norm = normalizer(size=self.env_params['obs'], default_clip_range=self.args.clip_range)
@@ -112,20 +97,16 @@ class RLAgent:
             ag_norm = torch.tensor(self.g_norm.normalize(ag), dtype=torch.float32).unsqueeze(0)
             g_norm = torch.tensor(self.g_norm.normalize(g), dtype=torch.float32).unsqueeze(0)
 
-            if self.architecture == 'flat':
-                input_tensor = self._preproc_inputs(obs, ag, g)
-                action = self._select_actions(input_tensor, no_noise=no_noise)
+            obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
+            if self.args.cuda:
+                obs_tensor = obs_tensor.cuda()
+                g_norm = g_norm.cuda()
+                ag_norm = ag_norm.cuda()
+            self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
+            if self.args.cuda:
+                action = self.model.pi_tensor.cpu().numpy()[0]
             else:
-                obs_tensor = torch.tensor(obs_norm, dtype=torch.float32).unsqueeze(0)
-                if self.args.cuda:
-                    obs_tensor = obs_tensor.cuda()
-                    g_norm = g_norm.cuda()
-                    ag_norm = ag_norm.cuda()
-                self.model.policy_forward_pass(obs_tensor, ag_norm, g_norm, no_noise=no_noise)
-                if self.args.cuda:
-                    action = self.model.pi_tensor.cpu().numpy()[0]
-                else:
-                    action = self.model.pi_tensor.numpy()[0]
+                action = self.model.pi_tensor.numpy()[0]
                 
         return action.copy()
     
@@ -135,10 +116,9 @@ class RLAgent:
     # pre_process the inputs
     def _preproc_inputs(self, obs, ag, g):
         obs_norm = self.o_norm.normalize(obs)
-        ag_norm = self.g_norm.normalize(ag)
-        g_norm = self.g_norm.normalize(g)
+        delta_g = g - ag
         # concatenate the stuffs
-        inputs = np.concatenate([obs_norm, ag_norm, g_norm])
+        inputs = np.concatenate([obs_norm, delta_g])
         inputs = torch.tensor(inputs, dtype=torch.float32).unsqueeze(0)
         if self.args.cuda:
             inputs = inputs.cuda()
@@ -151,10 +131,7 @@ class RLAgent:
 
         # soft update
         if self.total_iter % self.freq_target_update == 0:
-            if self.architecture == 'flat':
-                self._soft_update_target_network(self.critic_target_network, self.critic_network)
-            else:
-                self._soft_update_target_network(self.model.critic_target, self.model.critic)
+            self._soft_update_target_network(self.model.critic_target, self.model.critic)
                 
 
     def _select_actions(self, state, no_noise=False):
@@ -226,43 +203,21 @@ class RLAgent:
         obs_next_norm = self.o_norm.normalize(transitions['obs_next'])
         ag_next_norm = self.g_norm.normalize(transitions['ag_next'])
 
-        if self.architecture == 'flat':
-            update_flat(self.actor_network, self.critic_network,self.critic_target_network, self.policy_optim, self.critic_optim, self.alpha,
-             self.log_alpha, self.target_entropy, self.alpha_optim, obs_norm, ag_norm, g_norm, obs_next_norm, actions, rewards, self.args)
-        else:
-            update_deepsets(self.model, self.policy_optim, self.critic_optim, self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
-             obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, actions, rewards, self.args)
+        update_deepsets(self.model, self.policy_optim, self.critic_optim, self.alpha, self.log_alpha, self.target_entropy, self.alpha_optim,
+            obs_norm, ag_norm, g_norm, obs_next_norm, ag_next_norm, actions, rewards, self.args)
 
     def save(self, model_path, epoch):
-        # Store model
-        if self.args.architecture == 'flat':
-            torch.save([self.o_norm.mean, self.o_norm.std, self.g_norm.mean, self.g_norm.std,
-                        self.actor_network.state_dict(), self.critic_network.state_dict()],
-                       model_path + '/model_{}.pt'.format(epoch))
-        else:
-            torch.save([self.o_norm.mean, self.o_norm.std, self.g_norm.mean, self.g_norm.std,
-                        self.model.actor.state_dict(), self.model.critic.state_dict()],
-                       model_path + '/model_{}.pt'.format(epoch))
+        torch.save([self.o_norm.mean, self.o_norm.std, self.g_norm.mean, self.g_norm.std,
+                    self.model.actor.state_dict(), self.model.critic.state_dict()],
+                    model_path + '/model_{}.pt'.format(epoch))
 
     def load(self, model_path, args):
 
-        if args.architecture == 'deepsets':
-            o_mean, o_std, g_mean, g_std, phi_a, phi_c, rho_a, rho_c, enc = torch.load(model_path, map_location=lambda storage, loc: storage)
-            self.model.single_phi_actor.load_state_dict(phi_a)
-            self.model.single_phi_critic.load_state_dict(phi_c)
-            self.model.rho_actor.load_state_dict(rho_a)
-            self.model.rho_critic.load_state_dict(rho_c)
-            self.model.critic_sentence_encoder.load_state_dict(enc)
-            self.o_norm.mean = o_mean
-            self.o_norm.std = o_std
-            self.g_norm.mean = g_mean
-            self.g_norm.std = g_std
-        else:
-            o_mean, o_std, g_mean, g_std, actor, critic = torch.load(model_path, map_location=lambda storage, loc: storage)
-            self.model.actor.load_state_dict(actor)
-            self.model.critic.load_state_dict(critic)
-            self.model.actor.eval()
-            self.o_norm.mean = o_mean
-            self.o_norm.std = o_std
-            self.g_norm.mean = g_mean
-            self.g_norm.std = g_std
+        o_mean, o_std, g_mean, g_std, actor, critic = torch.load(model_path, map_location=lambda storage, loc: storage)
+        self.model.actor.load_state_dict(actor)
+        self.model.critic.load_state_dict(critic)
+        self.model.actor.eval()
+        self.o_norm.mean = o_mean
+        self.o_norm.std = o_std
+        self.g_norm.mean = g_mean
+        self.g_norm.std = g_std

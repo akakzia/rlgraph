@@ -52,7 +52,7 @@ def get_args():
     parser.add_argument('--normalize_goal', type=bool, default=False, help='do evaluation at the end of the epoch w/ frequency')
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     # the gnns arguments
-    parser.add_argument('--architecture', type=str, default='interaction_network', help='The architecture of the networks [full_gn, interaction_network]')
+    parser.add_argument('--architecture', type=str, default='interaction_network', help='[full_gn, interaction_network, relation_network, deep_sets, flat]')
     # the testing arguments
     parser.add_argument('--n-test-rollouts', type=int, default=1, help='the number of tests')
 

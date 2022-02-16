@@ -10,10 +10,10 @@ from utils import get_graph_structure
 epsilon = 1e-6
 
 
-class GnnCritic(nn.Module):
+class RnCritic(nn.Module):
     def __init__(self, nb_objects, edges, incoming_edges, predicate_ids, dim_body, dim_object, dim_mp_input,
                  dim_mp_output, dim_rho_critic_input, dim_rho_critic_output):
-        super(GnnCritic, self).__init__()
+        super(RnCritic, self).__init__()
 
         self.nb_objects = nb_objects
         self.dim_body = dim_body
@@ -81,10 +81,10 @@ class GnnCritic(nn.Module):
         return output_mp
 
 
-class GnnActor(nn.Module):
+class RnActor(nn.Module):
     def __init__(self, nb_objects, edges, incoming_edges, predicate_ids, dim_body, dim_object, dim_mp_input, dim_mp_output, 
                  dim_rho_actor_input,dim_rho_actor_output):
-        super(GnnActor, self).__init__()
+        super(RnActor, self).__init__()
 
         self.nb_objects = nb_objects
         self.dim_body = dim_body
@@ -162,7 +162,7 @@ class GnnActor(nn.Module):
         return action, log_prob, torch.tanh(mean)
 
 
-class GnnSemantic:
+class RnSemantic:
     def __init__(self, env_params, args):
         self.dim_body = 10
         self.dim_object = 15
@@ -198,13 +198,13 @@ class GnnSemantic:
         dim_rho_critic_input = dim_mp_critic_output
         dim_rho_critic_output = 1
 
-        self.critic = GnnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids,
+        self.critic = RnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids,
                                 self.dim_body, self.dim_object, dim_mp_critic_input, dim_mp_critic_output,
                                 dim_rho_critic_input, dim_rho_critic_output)
-        self.critic_target = GnnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids,
+        self.critic_target = RnCritic(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids,
                                        self.dim_body, self.dim_object, dim_mp_critic_input, dim_mp_critic_output,
                                        dim_rho_critic_input, dim_rho_critic_output)
-        self.actor = GnnActor(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids, self.dim_body, self.dim_object, 
+        self.actor = RnActor(self.nb_objects, self.edges, self.incoming_edges, self.predicate_ids, self.dim_body, self.dim_object, 
                               dim_mp_actor_input, dim_mp_actor_output, dim_rho_actor_input, dim_rho_actor_output)
 
     def policy_forward_pass(self, obs, ag, g, no_noise=False):
