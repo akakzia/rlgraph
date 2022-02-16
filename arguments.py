@@ -18,7 +18,7 @@ def get_args():
     # the environment arguments
     parser.add_argument('--algo', type=str, default='semantic', help="'semantic', 'continuous'")
     parser.add_argument('--agent', type=str, default='SAC', help='the RL algorithm name')
-    parser.add_argument('--n-blocks', type=int, default=3, help='The number of blocks to be considered in the FetchManipulate env')
+    parser.add_argument('--n-blocks', type=int, default=5, help='The number of blocks to be considered in the FetchManipulate env')
     # the training arguments
     parser.add_argument('--n-epochs', type=int, default=1000, help='the number of epochs to train the agent')
     parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
@@ -53,7 +53,7 @@ def get_args():
     parser.add_argument('--clip-range', type=float, default=5, help='the clip range')
     # the gnns arguments
     parser.add_argument('--architecture', type=str, default='gnn', help='The architecture of the networks')
-    parser.add_argument('--variant', type=int, default=1, help='1: no interaction graph, 2: with explicit interaction graph')
+    parser.add_argument('--variant', type=int, default=2, help='1: no interaction graph, 2: with explicit interaction graph')
     parser.add_argument('--aggregation-fct', type=str, default='max', help='node-wise aggregation function')
     # the testing arguments
     parser.add_argument('--n-test-rollouts', type=int, default=1, help='the number of tests')

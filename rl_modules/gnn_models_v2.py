@@ -24,8 +24,9 @@ class GnnCritic(nn.Module):
         self.aggregation = aggregation
 
         self.mp_critic = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.phi_critic = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
-        self.self_attention = SelfAttention(dim_phi_critic_output, 1)  # test 1 attention heads
+        self.node_self_attention = SelfAttention(dim_phi_critic_output, 1)  # test 1 attention heads
         self.rho_critic = RhoCriticDeepSet(dim_rho_critic_input, dim_rho_critic_output)
 
         self.edges = edges
@@ -40,25 +41,27 @@ class GnnCritic(nn.Module):
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        if self.aggregation == 'max':
-            inp = torch.stack([torch.cat([act, obs_body, obj, torch.max(edge_features[self.incoming_edges[i], :, :], dim=0).values], dim=1)
-                               for i, obj in enumerate(obs_objects)])
-        elif self.aggregation == 'sum':
-            inp = torch.stack([torch.cat([act, obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
-                               for i, obj in enumerate(obs_objects)])
-        elif self.aggregation == 'mean':
-            inp = torch.stack([torch.cat([act, obs_body, obj, torch.mean(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
-                               for i, obj in enumerate(obs_objects)])
-        else:
-            raise NotImplementedError
+        # if self.aggregation == 'max':
+        #     inp = torch.stack([torch.cat([act, obs_body, obj, torch.max(edge_features[self.incoming_edges[i], :, :], dim=0).values], dim=1)
+        #                        for i, obj in enumerate(obs_objects)])
+        # elif self.aggregation == 'sum':
+        #     inp = torch.stack([torch.cat([act, obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+        #                        for i, obj in enumerate(obs_objects)])
+        # elif self.aggregation == 'mean':
+        #     inp = torch.stack([torch.cat([act, obs_body, obj, torch.mean(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+        #                        for i, obj in enumerate(obs_objects)])
+        # else:
+        #     raise NotImplementedError
+
+        inp = torch.stack([torch.cat([act, obs_body, obj, edge_features[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
 
         output_phi_critic_1, output_phi_critic_2 = self.phi_critic(inp)
         output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
-        output_self_attention_1 = self.self_attention(output_phi_critic_1)
+        output_self_attention_1 = self.node_self_attention(output_phi_critic_1)
         output_self_attention_1 = output_self_attention_1.sum(dim=1)
 
         output_phi_critic_2 = output_phi_critic_2.permute(1, 0, 2)
-        output_self_attention_2 = self.self_attention(output_phi_critic_2)
+        output_self_attention_2 = self.node_self_attention(output_phi_critic_2)
         output_self_attention_2 = output_self_attention_2.sum(dim=1)
 
         q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_self_attention_1, output_self_attention_2)
@@ -78,7 +81,12 @@ class GnnCritic(nn.Module):
 
         output_mp = self.mp_critic(inp_mp)
 
-        return output_mp
+        # Apply self attention on edge features for each node based on the incoming edges
+        output_mp = output_mp.permute(1, 0, 2)
+        output_mp_attention = torch.stack([self.edge_self_attention(output_mp[:, self.incoming_edges[i], :]) for i in range(self.nb_objects)])
+        output_mp_attention = output_mp_attention.sum(dim=-2)
+
+        return output_mp_attention
 
 
 class GnnActor(nn.Module):
@@ -106,17 +114,19 @@ class GnnActor(nn.Module):
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        if self.aggregation == 'max':
-            inp = torch.stack([torch.cat([obs_body, obj, torch.max(edge_features[self.incoming_edges[i], :, :], dim=0).values], dim=1)
-                                       for i, obj in enumerate(obs_objects)])
-        elif self.aggregation == 'sum':
-            inp = torch.stack([torch.cat([obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
-                               for i, obj in enumerate(obs_objects)])
-        elif self.aggregation == 'mean':
-            inp = torch.stack([torch.cat([obs_body, obj, torch.mean(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
-                               for i, obj in enumerate(obs_objects)])
-        else:
-            raise NotImplementedError
+        # if self.aggregation == 'max':
+        #     inp = torch.stack([torch.cat([obs_body, obj, torch.max(edge_features[self.incoming_edges[i], :, :], dim=0).values], dim=1)
+        #                                for i, obj in enumerate(obs_objects)])
+        # elif self.aggregation == 'sum':
+        #     inp = torch.stack([torch.cat([obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+        #                        for i, obj in enumerate(obs_objects)])
+        # elif self.aggregation == 'mean':
+        #     inp = torch.stack([torch.cat([obs_body, obj, torch.mean(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+        #                        for i, obj in enumerate(obs_objects)])
+        # else:
+        #     raise NotImplementedError
+
+        inp = torch.stack([torch.cat([obs_body, obj, edge_features[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
 
         output_phi_actor = self.phi_actor(inp)
         output_phi_actor = output_phi_actor.permute(1, 0, 2)
