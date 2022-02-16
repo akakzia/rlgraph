@@ -74,8 +74,8 @@ class GnnCritic(nn.Module):
 
         delta_g = g - ag
 
-        inp_mp = torch.stack([torch.cat([delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]][:, :3],
-                                         obs_objects[self.edges[i][1]][:, :3]], dim=-1) for i in range(self.n_permutations)])
+        inp_mp = torch.stack([torch.cat([delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
+                                         obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
 
         output_mp = self.mp_critic(inp_mp)
 
@@ -164,7 +164,7 @@ class GnnSemantic:
         # Process indexes for graph construction
         self.edges, self.incoming_edges, self.predicate_ids = get_graph_structure(self.nb_objects)
 
-        dim_mp_input = 6 + 2  # 2 * nb_position_dimensions + nb_predicates
+        dim_mp_input = 2 * self.dim_object + 2  # 2 * object_features + nb_predicates
         dim_mp_output = 3 * dim_mp_input
 
         dim_phi_actor_input = self.dim_body + self.dim_object + dim_mp_output
