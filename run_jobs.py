@@ -13,7 +13,7 @@ scratch = os.environ['SCRATCH']
 # Make top level directories
 mkdir_p(job_directory)
 
-nb_seeds = 5
+nb_seeds = 1
 models = ['flat', 'full_gn', 'relation_network', 'deep_sets', 'interaction_network_2']
 
 for i in range(nb_seeds):
@@ -45,7 +45,7 @@ for i in range(nb_seeds):
             fh.writelines("export OMPI_MCA_btl_openib_warn_default_gid_prefix=0\n")
             fh.writelines("export OMPI_MCA_mpi_warn_on_fork=0\n")
 
-            fh.writelines("srun python -u -B train.py --algo 'semantic' --n-blocks 5 --n-epochs 1000 --n-cycles 50 --n-batches 30 --architecture {} --save-dir '{}/' 2>&1 ".format(model, model))
+            fh.writelines("srun python -u -B train.py --algo 'continuous' --n-blocks 5 --n-epochs 1000 --n-cycles 50 --n-batches 30 --architecture {} --save-dir 'continuous_{}/' 2>&1 ".format(model, model))
 
         os.system("sbatch %s" % job_file)
         sleep(1)
