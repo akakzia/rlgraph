@@ -18,15 +18,15 @@ models = ['flat', 'full_gn', 'relation_network', 'deep_sets', 'interaction_netwo
 
 for i in range(nb_seeds):
     for model in models:
-        job_file = os.path.join(job_directory, "main_{}%.slurm".format(model))
+        job_file = os.path.join(job_directory, "continuous_{}%.slurm".format(model))
 
         with open(job_file, 'w') as fh:
             fh.writelines("#!/bin/bash\n")
             fh.writelines("#SBATCH --account=kcr@gpu\n")
-            fh.writelines("#SBATCH --job-name=main_{}\n".format(model))
+            fh.writelines("#SBATCH --job-name=continuous_{}\n".format(model))
             fh.writelines("#SBATCH --qos=qos_gpu-t3\n")
-            fh.writelines("#SBATCH --output=main_{}%_%j.out\n".format(model))
-            fh.writelines("#SBATCH --error=main_{}%_%j.out\n".format(model))
+            fh.writelines("#SBATCH --output=continuous_{}%_%j.out\n".format(model))
+            fh.writelines("#SBATCH --error=continuous_{}%_%j.out\n".format(model))
             fh.writelines("#SBATCH --time=19:59:59\n")
             fh.writelines("#SBATCH --ntasks=24\n")
             fh.writelines("#SBATCH --ntasks-per-node=1\n")
