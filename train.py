@@ -31,7 +31,7 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
-    args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+    args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -84,13 +84,14 @@ def launch(args):
 
             # Sample goals
             t_i = time.time()
-            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False) # These goals are overridden in rollout_worker
             time_dict['goal_sampler'] += time.time() - t_i
 
             # Environment interactions
             t_i = time.time()
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
                                                        true_eval=False,  # these are not offline evaluation episodes
+                                                       animated=False,
                                                       )
             time_dict['rollout'] += time.time() - t_i
 
@@ -126,17 +127,7 @@ def launch(args):
             # Performing evaluations
             t_i = time.time()
             eval_goals = []
-            if args.n_blocks == 3:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'pyramid_3', 'stack_3']
-            elif args.n_blocks == 5:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'stack_3', '2stacks_2_2', '2stacks_2_3', 'pyramid_3',
-                                'mixed_2_3', 'stack_4', 'stack_5']
-            else:
-                raise NotImplementedError
-            for instruction in instructions:
-                eval_goal = get_eval_goals(instruction, n=args.n_blocks)
-                eval_goals.append(eval_goal.squeeze(0))
-            eval_goals = np.array(eval_goals)
+            eval_goals = goal_sampler.sample_goal(evaluation=True)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
                                                        true_eval=True,  # this is offline evaluations
                                                        )

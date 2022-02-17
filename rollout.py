@@ -1,9 +1,5 @@
 import numpy as np
 
-
-def is_success(ag, g):
-    return (ag == g).all()
-
 def at_least_one_fallen(observation, n):
     """ Given a observation, returns true if at least one object has fallen """
     dim_body = 10
@@ -26,21 +22,19 @@ class RolloutWorker:
         self.args = args
 
     def generate_rollout(self, goals, true_eval, animated=False):
-
+        # In continuous case, goals correspond to classes of goals (0: no stacks | 1: stack 2 | 2: stack 3 | 3: stack 4 | 4: stack 5)
         episodes = []
         # Reset only once for all the goals in cycle if not performing evaluation
-        if not true_eval and not self.continuous:
+        if not true_eval:
             observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]))
         for i in range(goals.shape[0]):
-            if true_eval or self.continuous:
+            if true_eval:
                 observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
             obs = observation['observation']
             ag = observation['achieved_goal']
-            ag_bin = observation['achieved_goal_binary']
             g = observation['desired_goal']
-            g_bin = observation['desired_goal_binary']
 
-            ep_obs, ep_ag, ep_ag_bin, ep_g, ep_g_bin, ep_actions, ep_success, ep_rewards = [], [], [], [], [], [], [], []
+            ep_obs, ep_ag, ep_g, ep_actions, ep_success, ep_rewards = [], [], [], [], [], [],
 
             # Start to collect samples
             for t in range(self.env_params['max_timesteps']):
@@ -53,20 +47,19 @@ class RolloutWorker:
                 if animated:
                     self.env.render()
 
-                observation_new, r, _, _ = self.env.step(action)
+                observation_new, r, _, info = self.env.step(action)
                 obs_new = observation_new['observation']
                 ag_new = observation_new['achieved_goal']
                 ag_new_bin = observation_new['achieved_goal_binary']
+                success = info['is_success']
 
                 # Append rollouts
                 ep_obs.append(obs.copy())
                 ep_ag.append(ag.copy())
-                ep_ag_bin.append(ag_bin.copy())
                 ep_g.append(g.copy())
-                ep_g_bin.append(g_bin.copy())
                 ep_actions.append(action.copy())
                 ep_rewards.append(r)
-                ep_success.append(is_success(ag_new, g))
+                ep_success.append(success)
 
                 # Re-assign the observation
                 obs = obs_new
@@ -75,7 +68,6 @@ class RolloutWorker:
 
             ep_obs.append(obs.copy())
             ep_ag.append(ag.copy())
-            ep_ag_bin.append(ag_bin.copy())
 
             # Gather everything
             episode = dict(obs=np.array(ep_obs).copy(),
@@ -83,16 +75,14 @@ class RolloutWorker:
                            g=np.array(ep_g).copy(),
                            ag=np.array(ep_ag).copy(),
                            success=np.array(ep_success).copy(),
-                           g_binary=np.array(ep_g_bin).copy(),
-                           ag_binary=np.array(ep_ag_bin).copy(),
                            rewards=np.array(ep_rewards).copy())
 
 
             episodes.append(episode)
 
-            # if not eval, make sure that no block has fallen 
+            # if not eval, make sure that no block has fallen. If so (or success), then reset
             fallen = at_least_one_fallen(obs, self.args.n_blocks)
-            if not true_eval and fallen:
+            if not true_eval and (fallen or success):
                 observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
 
         return episodes

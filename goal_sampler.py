@@ -3,7 +3,7 @@ from utils import get_idxs_per_relation
 from mpi4py import MPI
 
 
-ALL_MASKS = True
+COPLANAR_PROBA = 0.2
 
 
 class GoalSampler:
@@ -21,20 +21,19 @@ class GoalSampler:
 
         self.init_stats()
 
-    def sample_goal(self, n_goals, evaluation):
+    def sample_goal(self, n_goals=2, evaluation=False):
         """
         Sample n_goals goals to be targeted during rollouts
         evaluation controls whether or not to sample the goal uniformly or according to curriculum
         """
-        if evaluation and len(self.discovered_goals) > 0:
-            goals = np.random.choice(self.discovered_goals, size=self.num_rollouts_per_mpi)
+        if evaluation:
+            return np.array([0, 1, 2, 3, 4])
         else:
-            if len(self.discovered_goals) == 0:
-                goals = np.random.choice([-1., 1.], size=(n_goals, self.goal_dim))
+            if np.random.uniform() < COPLANAR_PROBA:
+                return np.zeros(n_goals)
             else:
-                # sample uniformly from discovered goals
-                goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
-                goals = np.array(self.discovered_goals)[goal_ids]
+                n = np.random.randint(1, 5)
+                return n * np.ones(n_goals)
         return goals
 
     def update(self, episodes, t):
@@ -69,14 +68,15 @@ class GoalSampler:
     def init_stats(self):
         self.stats = dict()
         # Number of classes of eval
-        if self.goal_dim == 30:
+        if self.continuous:
+            n = 5
+        elif self.goal_dim == 30:
             n = 11
         else:
             n = 6
-        if not self.continuous:
-            for i in np.arange(1, n+1):
-                self.stats['Eval_SR_{}'.format(i)] = []
-                self.stats['Av_Rew_{}'.format(i)] = []
+        for i in np.arange(1, n+1):
+            self.stats['Eval_SR_{}'.format(i)] = []
+            self.stats['Av_Rew_{}'.format(i)] = []
         self.stats['epoch'] = []
         self.stats['episodes'] = []
         self.stats['global_sr'] = []
@@ -93,7 +93,6 @@ class GoalSampler:
         for k in time_dict.keys():
             self.stats['t_{}'.format(k)].append(time_dict[k])
         self.stats['nb_discovered'].append(len(self.discovered_goals))
-        if not self.continuous:
-            for g_id in np.arange(1, len(av_res) + 1):
-                self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
-                self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])
+        for g_id in np.arange(1, len(av_res) + 1):
+            self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
+            self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])

@@ -306,7 +306,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
     def reset(self, goal=None):
         self.binary_goal = goal
 
-        self.target_goal, goals, number_of_goals_along_stack = self._sample_goal(return_extra_info=True)
+        self.target_goal, goals, number_of_goals_along_stack = self._sample_goal(goal, return_extra_info=True)
         # self.target_goal = self.sample_continuous_goal_from_binary_goal(goal)
 
         self.sim.set_state(self.initial_state)
@@ -332,20 +332,25 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         return self.reset(goal=goal)
 
 
-    def _sample_goal(self, return_extra_info=False):
+    def _sample_goal(self, goal=None, return_extra_info=False):
+        # Given a class of goals, sample target positions for each object
+        # classes: 0: no stack | 1: stack 2 | 2: stack 3 | 3: stack 4 | 4: stack 5
+        # max_goals_along_stack = self.num_blocks
+        # if self.all_goals_always_on_stack:
+        #     min_goals_along_stack = self.num_blocks
+        # else:
+        #     min_goals_along_stack = 2
 
-        max_goals_along_stack = self.num_blocks
-        if self.all_goals_always_on_stack:
-            min_goals_along_stack = self.num_blocks
-        else:
-            min_goals_along_stack = 2
 
+        # if np.random.uniform() < 1.0 - self.goals_on_stack_probability:
+        #     max_goals_along_stack = 1
+        #     min_goals_along_stack = 0
 
-        if np.random.uniform() < 1.0 - self.goals_on_stack_probability:
-            max_goals_along_stack = 1
-            min_goals_along_stack = 0
-
-        number_of_goals_along_stack = np.random.randint(min_goals_along_stack, max_goals_along_stack + 1)
+        # number_of_goals_along_stack = np.random.randint(min_goals_along_stack, max_goals_along_stack + 1)
+        if goal is not None:
+            number_of_goals_along_stack = goal + 1
+        else: 
+            number_of_goals_along_stack = 1
 
         goal0 = None
         first_goal_is_valid = False
