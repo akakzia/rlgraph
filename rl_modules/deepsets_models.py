@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from itertools import permutations
 import numpy as np
-from rl_modules.networks import GnnMessagePassing, PhiCriticDeepSet, PhiActorDeepSet, RhoActorDeepSet, RhoCriticDeepSet, SelfAttention
+from rl_modules.networks import PhiCriticDeepSet, PhiActorDeepSet, RhoActorDeepSet, RhoCriticDeepSet, SelfAttention
 from utils import get_idxs_per_object
 
 epsilon = 1e-6
@@ -117,7 +117,7 @@ class DsSemantic:
         self.log_prob = None
 
         # Process indexes for graph construction
-        self.semantic_ids = get_idxs_per_object(n=self.nb_objects)
+        self.semantic_ids = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
         dim_predicates_per_object = len(self.semantic_ids[0])
 
 

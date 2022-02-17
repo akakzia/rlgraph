@@ -162,9 +162,16 @@ class InSemantic:
         self.log_prob = None
 
         # Process indexes for graph construction
-        self.edges, self.incoming_edges, self.predicate_ids = get_graph_structure(self.nb_objects)
+        self.edges, self.incoming_edges, _ = get_graph_structure(self.nb_objects)
+        goal_ids_per_object = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
+        perm = permutations(np.arange(self.nb_objects), 2)
+        self.predicate_ids = []
+        for p in perm:
+            self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
 
-        dim_mp_input = 2 * self.dim_object + 2  # 2 * object_features + nb_predicates
+        dim_edge_features = len(self.predicate_ids[0])
+
+        dim_mp_input = 2 * self.dim_object + dim_edge_features  # 2 * object_features + nb_predicates
         dim_mp_output = 3 * dim_mp_input
 
         dim_phi_actor_input = self.dim_body + self.dim_object + dim_mp_output
