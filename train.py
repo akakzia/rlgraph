@@ -135,6 +135,8 @@ def launch(args):
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
                                                        self_eval=self_eval,
                                                        true_eval=True,  # this is offline evaluations
+                                                       biased_init=False, 
+                                                       animated=False
                                                        )
 
             results = np.array([e['success'][-1].astype(np.float32) for e in episodes])
