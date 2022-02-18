@@ -180,7 +180,8 @@ class GnSemantic:
         perm = permutations(np.arange(self.nb_objects), 2)
         self.predicate_ids = []
         for p in perm:
-            self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+            # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+            self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
 
         dim_edge_features = len(self.predicate_ids[0])
 
