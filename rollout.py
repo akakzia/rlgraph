@@ -21,14 +21,14 @@ class RolloutWorker:
         self.continuous = args.algo == 'continuous'
         self.args = args
 
-    def generate_rollout(self, goals, true_eval, animated=False):
+    def generate_rollout(self, goals, self_eval, true_eval, animated=False):
         # In continuous case, goals correspond to classes of goals (0: no stacks | 1: stack 2 | 2: stack 3 | 3: stack 4 | 4: stack 5)
         episodes = []
         # Reset only once for all the goals in cycle if not performing evaluation
         if not true_eval:
             observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]))
         for i in range(goals.shape[0]):
-            if true_eval:
+            if true_eval or self_eval:
                 observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
             obs = observation['observation']
             ag = observation['achieved_goal']
@@ -39,7 +39,7 @@ class RolloutWorker:
             # Start to collect samples
             for t in range(self.env_params['max_timesteps']):
                 # Run policy for one step
-                no_noise = true_eval  # do not use exploration noise if running self-evaluations or offline evaluations
+                no_noise = self_eval or true_eval  # do not use exploration noise if running self-evaluations or offline evaluations
                 # feed both the observation and mask to the policy module
                 action = self.policy.act(obs.copy(), ag.copy(), g.copy(), no_noise)
 
@@ -76,7 +76,9 @@ class RolloutWorker:
                            ag=np.array(ep_ag).copy(),
                            success=np.array(ep_success).copy(),
                            rewards=np.array(ep_rewards).copy())
-
+            
+            episode['goal_class'] = goals[i]
+            episode['self_eval'] = self_eval
 
             episodes.append(episode)
 

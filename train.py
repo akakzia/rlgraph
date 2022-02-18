@@ -1,3 +1,4 @@
+from re import S
 import torch
 import numpy as np
 from mpi4py import MPI
@@ -84,12 +85,13 @@ def launch(args):
 
             # Sample goals
             t_i = time.time()
-            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False) # These goals are overridden in rollout_worker
+            goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False) # These goals are overridden in rollout_worker
             time_dict['goal_sampler'] += time.time() - t_i
 
             # Environment interactions
             t_i = time.time()
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
+                                                       self_eval=self_eval,
                                                        true_eval=False,  # these are not offline evaluation episodes
                                                        animated=False,
                                                       )
@@ -97,8 +99,7 @@ def launch(args):
 
             # Goal Sampler updates
             t_i = time.time()
-            if args.algo == 'semantic':
-                episodes = goal_sampler.update(episodes, episode_count)
+            episodes = goal_sampler.update(episodes)
             time_dict['gs_update'] += time.time() - t_i
 
             # Storing episodes
@@ -119,6 +120,9 @@ def launch(args):
             time_dict['policy_train'] += time.time() - t_i
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
+        if rank == 0:
+            goal_sampler.update_lp()
+        goal_sampler.sync()
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
 
@@ -129,6 +133,7 @@ def launch(args):
             eval_goals = []
             eval_goals = goal_sampler.sample_goal(evaluation=True)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
+                                                       self_eval=self_eval,
                                                        true_eval=True,  # this is offline evaluations
                                                        )
 

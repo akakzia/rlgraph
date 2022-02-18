@@ -44,13 +44,28 @@ class ReplayBuffer:
                 self.buffer['ag'][idxs[i]] = e['ag']
                 self.buffer['g'][idxs[i]] = e['g']
                 self.buffer['actions'][idxs[i]] = e['act']
+                self.goal_ids[idxs[i]] = e['goal_class']
 
     # sample the data from the replay buffer
     def sample(self, batch_size):
         temp_buffers = {}
         with self.lock:
+            # for key in self.buffer.keys():
+            #     temp_buffers[key] = self.buffer[key][:self.current_size]
+
+            # Compute goal id proportions with respect to LP probas
+            goal_ids = self.goal_sampler.build_batch(batch_size)
+
+            buffer_ids = []
+            for g in goal_ids:
+                buffer_ids_g = np.argwhere(self.goal_ids == g).flatten()
+                if buffer_ids_g.size == 0:
+                    buffer_ids.append(np.random.choice(range(self.current_size)))
+                else:
+                    buffer_ids.append(np.random.choice(buffer_ids_g))
+            buffer_ids = np.array(buffer_ids)
             for key in self.buffer.keys():
-                temp_buffers[key] = self.buffer[key][:self.current_size]
+                temp_buffers[key] = self.buffer[key][buffer_ids]
 
         temp_buffers['obs_next'] = temp_buffers['obs'][:, 1:, :]
         temp_buffers['ag_next'] = temp_buffers['ag'][:, 1:, :]
