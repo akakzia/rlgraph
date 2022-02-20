@@ -106,9 +106,7 @@ class GoalSampler:
         elif p.sum() < 1:
             p[-1] = 1 - p[:-1].sum()
 
-        # goal_ids = np.random.choice(range(self.n_classes), p=p, size=batch_size)
-
-        goal_ids = np.random.choice(range(self.n_classes), p=p) * np.ones(batch_size)
+        goal_ids = np.random.choice(range(self.n_classes), p=p, size=batch_size)
         return goal_ids
 
     def init_stats(self):
