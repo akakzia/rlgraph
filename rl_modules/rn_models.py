@@ -73,8 +73,8 @@ class RnCritic(nn.Module):
 
         delta_g = g - ag
 
-        inp_mp = torch.stack([torch.cat([obs_body, act, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
-                                         obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
+        inp_mp = torch.stack([torch.cat([obs_body, act, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]][:, :3],
+                                         obs_objects[self.edges[i][1]][:, :3]], dim=-1) for i in range(self.n_permutations)])
 
         output_mp = self.mp_critic(inp_mp)
 
@@ -110,8 +110,8 @@ class RnActor(nn.Module):
 
         delta_g = g - ag
 
-        inp_mp = torch.stack([torch.cat([obs_body, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
-                                         obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
+        inp_mp = torch.stack([torch.cat([obs_body, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]][:, :3],
+                                         obs_objects[self.edges[i][1]][:, :3]], dim=-1) for i in range(self.n_permutations)])
 
         output_mp = self.mp_actor(inp_mp)
 
@@ -183,14 +183,15 @@ class RnSemantic:
         perm = permutations(np.arange(self.nb_objects), 2)
         self.predicate_ids = []
         for p in perm:
-            self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+            # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+            self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
 
         dim_edge_features = len(self.predicate_ids[0])
 
-        dim_mp_actor_input = 2 * self.dim_object + dim_edge_features + self.dim_body # 2 * dim node + dim partial goal + dim global
+        dim_mp_actor_input = 2 * 3 + dim_edge_features + self.dim_body # 2 * dim node + dim partial goal + dim global
         dim_mp_actor_output = 3 * dim_mp_actor_input
 
-        dim_mp_critic_input = 2 * self.dim_object + dim_edge_features + (self.dim_body + self.dim_act) # 2 * dim node + dim partial goal + dim global
+        dim_mp_critic_input = 2 * 3 + dim_edge_features + (self.dim_body + self.dim_act) # 2 * dim node + dim partial goal + dim global
         dim_mp_critic_output = 3 * dim_mp_actor_input
 
         # dim_phi_actor_input = self.dim_body + self.dim_object + dim_mp_actor_output

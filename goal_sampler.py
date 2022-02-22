@@ -3,9 +3,6 @@ from utils import get_idxs_per_relation
 from mpi4py import MPI
 
 
-COPLANAR_PROBA = 0.2
-
-
 class GoalSampler:
     def __init__(self, args):
         self.num_rollouts_per_mpi = args.num_rollouts_per_mpi
@@ -29,12 +26,8 @@ class GoalSampler:
         if evaluation:
             return np.array([0, 1, 2, 3, 4])
         else:
-            if np.random.uniform() < COPLANAR_PROBA:
-                return np.zeros(n_goals)
-            else:
-                n = np.random.randint(1, 5)
-                return n * np.ones(n_goals)
-        return goals
+            n = np.random.randint(5)
+            return n * np.ones(n_goals)
 
     def update(self, episodes, t):
         """

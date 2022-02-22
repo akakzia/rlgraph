@@ -21,15 +21,15 @@ class RolloutWorker:
         self.continuous = args.algo == 'continuous'
         self.args = args
 
-    def generate_rollout(self, goals, true_eval, animated=False):
+    def generate_rollout(self, goals, true_eval, biased_init=True, animated=False):
         # In continuous case, goals correspond to classes of goals (0: no stacks | 1: stack 2 | 2: stack 3 | 3: stack 4 | 4: stack 5)
         episodes = []
         # Reset only once for all the goals in cycle if not performing evaluation
         if not true_eval:
-            observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]))
+            observation = self.env.unwrapped.reset_goal(goal=np.array(goals[0]), biased_init=biased_init)
         for i in range(goals.shape[0]):
             if true_eval:
-                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
+                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]), biased_init=False)
             obs = observation['observation']
             ag = observation['achieved_goal']
             g = observation['desired_goal']
@@ -83,7 +83,7 @@ class RolloutWorker:
             # if not eval, make sure that no block has fallen. If so (or success), then reset
             fallen = at_least_one_fallen(obs, self.args.n_blocks)
             if not true_eval and (fallen or success):
-                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]))
+                observation = self.env.unwrapped.reset_goal(goal=np.array(goals[i]), biased_init=biased_init)
 
         return episodes
 
