@@ -9,10 +9,8 @@ from types import SimpleNamespace
 from goal_sampler import GoalSampler
 import  random
 from mpi4py import MPI
-from language.build_dataset import sentence_from_configuration
-from utils import get_instruction
 from arguments import get_args
-import pickle as pkl
+from utils import get_eval_goals
 
 def get_env_params(env):
     obs = env.reset()
@@ -24,8 +22,8 @@ def get_env_params(env):
 
 if __name__ == '__main__':
     num_eval = 1
-    path = '/home/silvestre/'
-    model_path = path + 'model_70.pt'
+    path = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/models/'
+    model_path = path + 'actor_critic_gn.pt'
 
     # with open(path + 'config.json', 'r') as f:
     #     params = json.load(f)
@@ -33,10 +31,10 @@ if __name__ == '__main__':
     args = get_args()
 
     if args.algo == 'continuous':
-        args.env_name = 'FetchManipulate3ObjectsContinuous-v0'
+        args.env_name = 'FetchManipulate5ObjectsContinuous-v0'
         args.multi_criteria_her = True
     else:
-        args.env_name = 'FetchManipulate3Objects-v0'
+        args.env_name = 'FetchManipulate5Objects-v0'
 
     # Make the environment
     env = gym.make(args.env_name)
@@ -64,23 +62,17 @@ if __name__ == '__main__':
     # def rollout worker
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
 
-    # eval_goals = goal_sampler.valid_goals
-    eval_goals, eval_masks = goal_sampler.generate_eval_goals()
-    if args.algo == 'language':
-        language_goal = get_instruction()
-        eval_goals = np.array([goal_sampler.valid_goals[0] for _ in range(len(language_goal))])
-    else:
-        language_goal = None
-    inits = [None] * len(eval_goals)
+    eval_goals = []
+    instructions = ['stack_3', 'stack_4'] * 10
+    for instruction in instructions:
+        eval_goal = get_eval_goals(instruction, n=args.n_blocks)
+        eval_goals.append(eval_goal.squeeze(0))
+    eval_goals = np.array(eval_goals)
+
     all_results = []
     for i in range(num_eval):
-        episodes = rollout_worker.generate_rollout(eval_goals, eval_masks, self_eval=True, true_eval=True, animated=True, language_goal=language_goal)
-        if args.algo == 'language':
-            results = np.array([e['language_goal'] in sentence_from_configuration(e['ag'][-1], all=True) for e in episodes]).astype(np.int)
-        elif args.algo == 'continuous':
-            results = np.array([e['rewards'][-1] == 3. for e in episodes])
-        else:
-            results = np.array([e['rewards'][-1] == 3. for e in episodes])
+        episodes = rollout_worker.generate_rollout(eval_goals, true_eval=True, animated=True)
+        results = np.array([e['rewards'][-1] == 5. for e in episodes])
         all_results.append(results)
 
     results = np.array(all_results)
