@@ -22,9 +22,7 @@ class GnCritic(nn.Module):
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
         self.mp_critic = GnnMessagePassing(dim_mp_input, dim_mp_output)
-        self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.phi_critic = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
-        self.node_self_attention = SelfAttention(dim_phi_critic_output, 1)  # test 1 attention heads
         self.rho_critic = RhoCriticDeepSet(dim_rho_critic_input, dim_rho_critic_output)
 
         self.edges = edges
@@ -36,25 +34,21 @@ class GnCritic(nn.Module):
         assert batch_size == len(obs)
 
         # Critic message passing using node features, edge features and global features (here body + action)
-        # Returns, for each node, the attended vector of incoming edges
-        edge_features_attended = self.message_passing(obs, ag, g)
+        # Returns update edge features
+        edge_features = self.message_passing(obs, ag, g)
 
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        inp = torch.stack([torch.cat([act, obs_body, obj, edge_features_attended[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
+        inp = torch.stack([torch.cat([act, obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+                               for i, obj in enumerate(obs_objects)])
 
         output_phi_critic_1, output_phi_critic_2 = self.phi_critic(inp)
-        output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
-        output_self_attention_1 = self.node_self_attention(output_phi_critic_1)
-        output_self_attention_1 = output_self_attention_1.sum(dim=1)
+        output_phi_critic_1 = output_phi_critic_1.sum(dim=0)
+        output_phi_critic_2 = output_phi_critic_2.sum(dim=0)
 
-        output_phi_critic_2 = output_phi_critic_2.permute(1, 0, 2)
-        output_self_attention_2 = self.node_self_attention(output_phi_critic_2)
-        output_self_attention_2 = output_self_attention_2.sum(dim=1)
-
-        q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_self_attention_1, output_self_attention_2)
+        q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_phi_critic_1, output_phi_critic_2)
         return q1_pi_tensor, q2_pi_tensor
 
     def message_passing(self, obs, ag, g):
@@ -71,12 +65,7 @@ class GnCritic(nn.Module):
 
         output_mp = self.mp_critic(inp_mp)
 
-        # Apply self attention on edge features for each node based on the incoming edges
-        output_mp = output_mp.permute(1, 0, 2)
-        output_mp_attention = torch.stack([self.edge_self_attention(output_mp[:, self.incoming_edges[i], :]) for i in range(self.nb_objects)])
-        output_mp_attention = output_mp_attention.sum(dim=-2)
-
-        return output_mp_attention
+        return output_mp
 
 
 class GnActor(nn.Module):
@@ -91,9 +80,7 @@ class GnActor(nn.Module):
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
         self.mp_actor = GnnMessagePassing(dim_mp_input, dim_mp_output)
-        self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.phi_actor = PhiActorDeepSet(dim_phi_actor_input, 256, dim_phi_actor_output)
-        self.self_attention = SelfAttention(dim_phi_actor_output, 1) # test 1 attention heads
         self.rho_actor = RhoActorDeepSet(dim_rho_actor_input, dim_rho_actor_output)
 
         self.edges = edges
@@ -114,33 +101,28 @@ class GnActor(nn.Module):
 
         output_mp = self.mp_actor(inp_mp)
 
-        # Apply self attention on edge features for each node based on the incoming edges
-        output_mp = output_mp.permute(1, 0, 2)
-        output_mp_attention = torch.stack([self.edge_self_attention(output_mp[:, self.incoming_edges[i], :]) for i in range(self.nb_objects)])
-        output_mp_attention = output_mp_attention.sum(dim=-2)
-
-        return output_mp_attention
+        return output_mp
 
     def forward(self, obs, ag, g):
         batch_size = obs.shape[0]
         assert batch_size == len(obs)
 
         # Actor message passing using node features, edge features and global features (here body)
-        # Returns, for each node, the attended vector of incoming edges
-        edge_features_attended = self.message_passing(obs, ag, g)
+        # Returns the update edge features
+        edge_features = self.message_passing(obs, ag, g)
 
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        inp = torch.stack([torch.cat([obs_body, obj, edge_features_attended[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
+        inp = torch.stack([torch.cat([obs_body, obj, torch.sum(edge_features[self.incoming_edges[i], :, :], dim=0)], dim=1)
+                               for i, obj in enumerate(obs_objects)])
 
         output_phi_actor = self.phi_actor(inp)
-        output_phi_actor = output_phi_actor.permute(1, 0, 2)
-        output_self_attention = self.self_attention(output_phi_actor)
-        output_self_attention = output_self_attention.sum(dim=1)
+        output_phi_actor = output_phi_actor.sum(dim=0)
 
-        mean, logstd = self.rho_actor(output_self_attention)
+        mean, logstd = self.rho_actor(output_phi_actor)
+
         return mean, logstd
 
     def sample(self, obs, ag, g):
