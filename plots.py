@@ -26,28 +26,28 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098],  [0.466, 0.674, 0.188], [0.9
 #  [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],
 #  [0.3010, 0.745, 0.933], [0.635, 0.078, 0.184]]
 
-RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/results/'
+RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/results_continuous/'
 SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
-TO_PLOT = ['Global']
+TO_PLOT = ['continuous_goals']
 
-NB_CLASSES = 11 # 12 for 5 blocks
+NB_CLASSES = 5 # 12 for 5 blocks
 
 LINE = 'mean'
 ERR = 'std'
 DPI = 30
 N_SEEDS = None
 N_EPOCHS = None
-LINEWIDTH = 8
-MARKERSIZE = 15
+LINEWIDTH = 8 # 8 for per class
+MARKERSIZE = 15 # 15 for per class
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 'v', 's', 'P', 'D', 'X', "*", 'v', 's', 'p', 'P', '1']
 FREQ = 10
-NB_BUCKETS = 5
+NB_BUCKETS = 10
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-LAST_EP = 160
-LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 2
+LAST_EP = 140
+LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 5
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 COMPRESSOR = CompressPDF(4)
 # 0: '/default',
@@ -58,7 +58,7 @@ COMPRESSOR = CompressPDF(4)
 
 
 def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
-    fig = plt.figure(figsize=(24, 15), frameon=False)
+    fig = plt.figure(figsize=(37, 20), frameon=False) # 34 18 for semantic
     ax = fig.add_subplot(111)
     ax.spines['top'].set_linewidth(6)
     ax.spines['right'].set_linewidth(6)
@@ -78,8 +78,8 @@ def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
         plt.xlim(xlim)
     return artists, ax
 
-def setup_n_figs(n, xlabels=None, ylabels=None, xlims=None, ylims=None):
-    fig, axs = plt.subplots(n, 1, figsize=(22, 15), frameon=False)
+def setup_n_figs(n, m, xlabels=None, ylabels=None, xlims=None, ylims=None):
+    fig, axs = plt.subplots(n, m, figsize=(48, 12), frameon=False)
     axs = axs.ravel()
     artists = ()
     for i_ax, ax in enumerate(axs):
@@ -98,7 +98,7 @@ def setup_n_figs(n, xlabels=None, ylabels=None, xlims=None, ylims=None):
             ax.set_ylim(ylims[i_ax])
         if xlims[i_ax]:
             ax.set_xlim(xlims[i_ax])
-    return artists, axs
+    return fig, artists, axs
 
 def save_fig(path, artists):
     plt.savefig(os.path.join(path), bbox_extra_artists=artists, bbox_inches='tight', dpi=DPI)
@@ -196,8 +196,77 @@ def plot_sr_av(max_len, experiment_path, folder):
 
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
     plt.grid()
-    ax.set_facecolor((244/255, 244/255, 244/255))
+    # ax.set_facecolor((244/255, 244/255, 244/255))
     save_fig(path=SAVE_PATH + folder + '_sr.pdf', artists=artists)
+
+
+def plot_sr_av_all(max_len, experiment_path):
+    fig, artists, ax = setup_n_figs(n=1,
+                                   m=3, 
+                                #    xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
+                                #    ylabels= ['Success Rate', None] * 2,
+                                   xlabels = ['Episodes (x$10^3$)'] * 3,
+                                   ylabels = ['Success Rate', None, None],
+                                   xlims = [[-1, LIM] for _ in range(4)],
+                                   ylims= [[-0.02, 1.03] for _ in range(4)]
+        )
+    # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
+    titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-DS']
+    for k, folder in enumerate(['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_deep_sets']):
+        condition_path = experiment_path + folder + '/'
+        list_runs = sorted(os.listdir(condition_path))
+        global_sr = np.zeros([len(list_runs), max_len])
+        global_sr.fill(np.nan)
+        sr_data = np.zeros([len(list_runs), NB_CLASSES, max_len])
+        sr_data.fill(np.nan)
+        x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
+        # x_eps = np.arange(0, max_len, FREQ)
+        x = np.arange(0, LAST_EP + 1, FREQ)
+        for i_run, run in enumerate(list_runs):
+            run_path = condition_path + run + '/'
+            data_run = pd.read_csv(run_path + 'progress.csv')
+
+            T = len(data_run['Eval_SR_1'][:LAST_EP + 1])
+            SR = np.zeros([NB_CLASSES, T])
+            for t in range(T):
+                for i in range(NB_CLASSES):
+                    SR[i, t] = data_run['Eval_SR_{}'.format(i+1)][t]
+            all_sr = np.mean([data_run['Eval_SR_{}'.format(i+1)] for i in range(NB_CLASSES)], axis=0)
+
+            sr_buckets = []
+            for i in range(SR.shape[0]):
+                sr_buckets.append(SR[i])
+            sr_buckets = np.array(sr_buckets)
+            sr_data[i_run, :, :sr_buckets.shape[1]] = sr_buckets.copy()
+            global_sr[i_run, :all_sr.size] = all_sr.copy()
+        
+        sr_per_cond_stats = np.zeros([NB_CLASSES, max_len, 3])
+        sr_per_cond_stats[:, :, 0] = line(sr_data)
+        sr_per_cond_stats[:, :, 1] = err_min(sr_data)
+        sr_per_cond_stats[:, :, 2] = err_plus(sr_data)
+        av = line(global_sr)
+        for i in range(NB_CLASSES):
+            ax[k].plot(x_eps, sr_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
+        ax[k].plot(x_eps, av[x], color=[0.3]*3, linestyle='--', linewidth=LINEWIDTH // 2)
+
+        for i in range(NB_CLASSES):
+            ax[k].fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
+
+        ax[k].set_yticks([0, 0.25, 0.5, 0.75, 1])
+        ax[k].grid()
+        ax[k].set_title(titles[k], fontname='monospace', fontweight='bold')
+    # ax.set_facecolor((244/255, 244/255, 244/255))
+    leg = fig.legend(#['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$', '$S_4$', '$S_5$', 'Global'],
+                    ['No Stacks', '$\widetilde{S}_2$', '$\widetilde{S}_3$', '$\widetilde{S}_4$', '$\widetilde{S}_5$', 'Global'],
+                    loc='upper center',
+                    bbox_to_anchor=(0.525, 1.22),
+                    ncol=6,
+                    fancybox=True,
+                    shadow=True,
+                    prop={'size': 65, 'weight': 'normal'},
+                    markerscale=1)
+    artists += (leg,)
+    save_fig(path=SAVE_PATH + 'per_class.pdf', artists=artists)
 
 
 def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=None, ref='with_init'):
@@ -242,7 +311,7 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
                      ncol=5,
                      fancybox=True,
                      shadow=True,
-                     prop={'size': 30, 'weight': 'bold'},
+                     prop={'size': 40, 'weight': 'bold'},
                      markerscale=1,
                      )
     for l in leg.get_lines():
@@ -274,7 +343,7 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
 
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
     plt.grid()
-    ax.set_facecolor((244/255, 244/255, 244/255))
+    # ax.set_facecolor((244/255, 244/255, 244/255))
     save_fig(path=SAVE_PATH + PLOT + '.pdf', artists=artists)
     return sr_per_cond_stats.copy()
 
@@ -286,10 +355,11 @@ if __name__ == '__main__':
 
         max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
 
-        conditions = ['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets', 'flat']
-        labels = ['GANGSTR-GN', 'GANGSTR-IN', 'GANGSTR-RN', 'GANGSTR-DS', 'Flat']
-        get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
+        # conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_relation_network', 'continuous_deep_sets', 'continuous_flat']
+        # labels = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='continuous_full_gn')
         # plot_sr_av(max_len, experiment_path, 'flat')
+        plot_sr_av_all(max_len, experiment_path)
 
 
         # if PLOT == 'Architecture':
