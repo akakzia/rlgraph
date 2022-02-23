@@ -21,7 +21,7 @@ class RolloutWorker:
         self.continuous = args.algo == 'continuous'
         self.args = args
 
-    def generate_rollout(self, goals, self_eval, true_eval, biased_init=True, animated=False):
+    def generate_rollout(self, goals, self_eval, true_eval, biased_init=False, animated=False):
         # In continuous case, goals correspond to classes of goals (0: no stacks | 1: stack 2 | 2: stack 3 | 3: stack 4 | 4: stack 5)
         episodes = []
         # Reset only once for all the goals in cycle if not performing evaluation
