@@ -10,7 +10,7 @@ import json
 from scipy.stats import ttest_ind
 from utils import get_stat_func, CompressPDF
 
-font = {'size': 60}
+font = {'size': 70}
 matplotlib.rc('font', **font)
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
@@ -26,27 +26,27 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098],  [0.466, 0.674, 0.188], [0.9
 #  [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],
 #  [0.3010, 0.745, 0.933], [0.635, 0.078, 0.184]]
 
-RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/results_continuous/'
+RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/results/'
 SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
-TO_PLOT = ['continuous_goals']
+TO_PLOT = ['semantic_goals']
 
-NB_CLASSES = 5 # 12 for 5 blocks
+NB_CLASSES = 11 # 12 for 5 blocks
 
 LINE = 'mean'
 ERR = 'std'
 DPI = 30
 N_SEEDS = None
 N_EPOCHS = None
-LINEWIDTH = 8 # 8 for per class
-MARKERSIZE = 15 # 15 for per class
+LINEWIDTH = 10 # 8 for per class
+MARKERSIZE = 20 # 15 for per class
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 'v', 's', 'P', 'D', 'X', "*", 'v', 's', 'p', 'P', '1']
-FREQ = 10
+FREQ = 5
 NB_BUCKETS = 10
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-LAST_EP = 140
+LAST_EP = 165
 LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 5
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 COMPRESSOR = CompressPDF(4)
@@ -307,11 +307,11 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
         labels = conditions
     leg = plt.legend(labels,
                      loc='upper center',
-                     bbox_to_anchor=(0.5, 1.1),
+                     bbox_to_anchor=(0.5, 1.15),
                      ncol=5,
                      fancybox=True,
                      shadow=True,
-                     prop={'size': 40, 'weight': 'bold'},
+                     prop={'size': 65, 'weight': 'bold'},
                      markerscale=1,
                      )
     for l in leg.get_lines():
@@ -355,11 +355,18 @@ if __name__ == '__main__':
 
         max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
 
+        # Uncomment for continuous goals
         # conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_relation_network', 'continuous_deep_sets', 'continuous_flat']
-        # labels = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
+        # labels = ['C-GN', 'C-IN', 'C-RN', 'C-DS', 'C-Flat']
         # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='continuous_full_gn')
+
+        # Uncomment for semantic goals
+        conditions = ['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets', 'flat']
+        labels = ['S-GN', 'S-IN', 'S-RN', 'S-DS', 'S-Flat']
+        get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
+
         # plot_sr_av(max_len, experiment_path, 'flat')
-        plot_sr_av_all(max_len, experiment_path)
+        # plot_sr_av_all(max_len, experiment_path)
 
 
         # if PLOT == 'Architecture':
