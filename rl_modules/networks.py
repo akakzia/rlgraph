@@ -15,25 +15,24 @@ def weights_init_(m):
         torch.nn.init.xavier_uniform_(m.weight, gain=1)
         torch.nn.init.constant_(m.bias, 0)
 
-
 class QNetworkFlat(nn.Module):
-    def __init__(self, env_params):
+    def __init__(self, inp, out):
         super(QNetworkFlat, self).__init__()
 
         # Q1 architecture
-        self.linear1 = nn.Linear(env_params['obs'] + 2 * env_params['goal'] + env_params['action'], 256)
+        self.linear1 = nn.Linear(inp, 256)
         self.linear2 = nn.Linear(256, 256)
-        self.linear3 = nn.Linear(256, 1)
+        self.linear3 = nn.Linear(256, out)
 
         # Q2 architecture
-        self.linear4 = nn.Linear(env_params['obs'] + 2 * env_params['goal'] + env_params['action'], 256)
+        self.linear4 = nn.Linear(inp, 256)
         self.linear5 = nn.Linear(256, 256)
-        self.linear6 = nn.Linear(256, 1)
+        self.linear6 = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
     def forward(self, state, action):
-        xu = torch.cat([state, action], 1)
+        xu = torch.cat([state, action], dim=-1)
 
         x1 = F.relu(self.linear1(xu))
         x1 = F.relu(self.linear2(x1))
@@ -45,16 +44,15 @@ class QNetworkFlat(nn.Module):
 
         return x1, x2
 
-
 class GaussianPolicyFlat(nn.Module):
-    def __init__(self, env_params, action_space=None):
+    def __init__(self, inp, out, action_space=None):
         super(GaussianPolicyFlat, self).__init__()
 
-        self.linear1 = nn.Linear(env_params['obs'] + 2 * env_params['goal'], 256)
+        self.linear1 = nn.Linear(inp, 256)
         self.linear2 = nn.Linear(256, 256)
 
-        self.mean_linear = nn.Linear(256, env_params['action'])
-        self.log_std_linear = nn.Linear(256, env_params['action'])
+        self.mean_linear = nn.Linear(256, out)
+        self.log_std_linear = nn.Linear(256, out)
 
         self.apply(weights_init_)
 
@@ -76,23 +74,24 @@ class GaussianPolicyFlat(nn.Module):
         log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
         return mean, log_std
 
-    def sample(self, state):
-        mean, log_std = self.forward(state)
-        std = log_std.exp()
-        normal = Normal(mean, std)
-        x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
-        y_t = torch.tanh(x_t)
-        action = y_t * self.action_scale + self.action_bias
-        log_prob = normal.log_prob(x_t)
-        # Enforcing Action Bound
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        log_prob = log_prob.sum(1, keepdim=True)
-        return action, log_prob, torch.tanh(mean)
+    # def sample(self, state):
+    #     mean, log_std = self.forward(state)
+    #     std = log_std.exp()
+    #     normal = Normal(mean, std)
+    #     x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
+    #     y_t = torch.tanh(x_t)
+    #     action = y_t * self.action_scale + self.action_bias
+    #     log_prob = normal.log_prob(x_t)
+    #     # Enforcing Action Bound
+    #     log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
+    #     log_prob = log_prob.sum(1, keepdim=True)
+    #     return action, log_prob, torch.tanh(mean)
 
     def to(self, device):
         self.action_scale = self.action_scale.to(device)
         self.action_bias = self.action_bias.to(device)
         return super(GaussianPolicyFlat, self).to(device)
+
 
 
 # DeepSet networks. Phi designs pre-aggregation networks whereas Rho designs post-aggregation networks

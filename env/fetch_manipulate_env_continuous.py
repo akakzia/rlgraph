@@ -303,49 +303,55 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
 
         self.sim.forward()
 
-    def reset(self, goal=None):
+    def reset(self, goal=None, biased_init=True):
         self.binary_goal = goal
 
-        self.target_goal, goals, number_of_goals_along_stack = self._sample_goal(return_extra_info=True)
+        self.target_goal, goals, number_of_goals_along_stack = self._sample_goal(goal, return_extra_info=True)
         # self.target_goal = self.sample_continuous_goal_from_binary_goal(goal)
 
         self.sim.set_state(self.initial_state)
+        if biased_init:
+            if np.random.uniform() < 0.8:
+                goal_class = 0
+            else:
+                goal_class = np.random.randint(1, 5)
+            initial_object_positions = self._sample_goal(goal_class, return_extra_info=False)
+            initial_object_positions = initial_object_positions.reshape((self.num_blocks, 3))
+            np.random.shuffle(initial_object_positions)
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                object_qpos[:3] = initial_object_positions[i]
+
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
 
         # If evaluation mode, generate blocks on the table with no stacks
-        for i, obj_name in enumerate(self.object_names):
-            object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
-            assert object_qpos.shape == (7,)
-            object_qpos[2] = 0.425
-            object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
-                                                                                    self.obj_range,
-                                                                                    size=2)
-            object_qpos[:2] = object_xpos
+        else:
+            for i, obj_name in enumerate(self.object_names):
+                object_qpos = self.sim.data.get_joint_qpos('{}:joint'.format(obj_name))
+                assert object_qpos.shape == (7,)
+                object_qpos[2] = 0.425
+                object_xpos = self.initial_gripper_xpos[:2] + self.np_random.uniform(-self.obj_range,
+                                                                                        self.obj_range,
+                                                                                        size=2)
+                object_qpos[:2] = object_xpos
 
-            self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
+                self.sim.data.set_joint_qpos('{}:joint'.format(obj_name), object_qpos)
 
         self.sim.forward()
         obs = self._get_obs()
 
         return obs
 
-    def reset_goal(self, goal=None):
-        return self.reset(goal=goal)
+    def reset_goal(self, goal=None, biased_init=True):
+        return self.reset(goal=goal, biased_init=biased_init)
 
 
-    def _sample_goal(self, return_extra_info=False):
-
-        max_goals_along_stack = self.num_blocks
-        if self.all_goals_always_on_stack:
-            min_goals_along_stack = self.num_blocks
-        else:
-            min_goals_along_stack = 2
-
-
-        if np.random.uniform() < 1.0 - self.goals_on_stack_probability:
-            max_goals_along_stack = 1
-            min_goals_along_stack = 0
-
-        number_of_goals_along_stack = np.random.randint(min_goals_along_stack, max_goals_along_stack + 1)
+    def _sample_goal(self, goal=None, return_extra_info=False):
+        if goal is not None:
+            number_of_goals_along_stack = goal + 1
+        else: 
+            number_of_goals_along_stack = 1
 
         goal0 = None
         first_goal_is_valid = False
@@ -362,7 +368,7 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
         goals = [goal0]
 
         prev_x_positions = [goal0[:2]]
-        goal_in_air_used = False
+        # goal_in_air_used = False
         for i in range(self.num_blocks - 1):
             if i < number_of_goals_along_stack - 1:
                 goal_i = goal0.copy()
@@ -377,9 +383,9 @@ class FetchManipulateEnvContinuous(robot_env.RobotEnv):
                 goal_i += self.target_offset
                 goal_i[2] = self.height_offset
 
-                if np.random.uniform() < 0.2 and not goal_in_air_used:
-                    goal_i[2] += self.np_random.uniform(0.03, 0.1)
-                    goal_in_air_used = True
+                # if np.random.uniform() < 0.2 and not goal_in_air_used:
+                #     goal_i[2] += self.np_random.uniform(0.03, 0.1)
+                #     goal_in_air_used = True
 
             prev_x_positions.append(goal_i[:2])
             goals.append(goal_i)

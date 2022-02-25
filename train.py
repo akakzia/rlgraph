@@ -1,3 +1,4 @@
+from re import S
 import torch
 import numpy as np
 from mpi4py import MPI
@@ -31,10 +32,7 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
-    if args.algo == 'semantic':
-        args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
-    else:
-        args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
+    args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -87,20 +85,21 @@ def launch(args):
 
             # Sample goals
             t_i = time.time()
-            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False) # These goals are overridden in rollout_worker
             time_dict['goal_sampler'] += time.time() - t_i
 
             # Environment interactions
             t_i = time.time()
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
+                                                       self_eval=self_eval,
                                                        true_eval=False,  # these are not offline evaluation episodes
+                                                       animated=False,
                                                       )
             time_dict['rollout'] += time.time() - t_i
 
             # Goal Sampler updates
             t_i = time.time()
-            if args.algo == 'semantic':
-                episodes = goal_sampler.update(episodes, episode_count)
+            episodes = goal_sampler.update(episodes)
             time_dict['gs_update'] += time.time() - t_i
 
             # Storing episodes
@@ -121,6 +120,9 @@ def launch(args):
             time_dict['policy_train'] += time.time() - t_i
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
+        if rank == 0:
+            goal_sampler.update_lp()
+        goal_sampler.sync()
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
 
@@ -129,21 +131,12 @@ def launch(args):
             # Performing evaluations
             t_i = time.time()
             eval_goals = []
-            if args.n_blocks == 3:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'pyramid_3', 'stack_3']
-            elif args.n_blocks == 5:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'stack_3', '2stacks_2_2', '2stacks_2_3', 'pyramid_3',
-                                'mixed_2_3', 'trapeze_2_3', 'stack_4', 'stack_5']
-            else:
-                raise NotImplementedError
-            if args.algo == 'continuous':
-                instructions = ['close_1'] # doesn't matter which instruction given in continuous
-            for instruction in instructions:
-                eval_goal = get_eval_goals(instruction, n=args.n_blocks)
-                eval_goals.append(eval_goal.squeeze(0))
-            eval_goals = np.array(eval_goals)
+            eval_goals = goal_sampler.sample_goal(evaluation=True)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
+                                                       self_eval=self_eval,
                                                        true_eval=True,  # this is offline evaluations
+                                                       biased_init=False, 
+                                                       animated=False
                                                        )
 
             results = np.array([e['success'][-1].astype(np.float32) for e in episodes])

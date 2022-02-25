@@ -18,15 +18,15 @@ models = ['flat', 'full_gn', 'relation_network', 'deep_sets', 'interaction_netwo
 
 for i in range(nb_seeds):
     for model in models:
-        job_file = os.path.join(job_directory, "main_{}%.slurm".format(model))
+        job_file = os.path.join(job_directory, "continuous_{}%.slurm".format(model))
 
         with open(job_file, 'w') as fh:
             fh.writelines("#!/bin/bash\n")
             fh.writelines("#SBATCH --account=kcr@gpu\n")
-            fh.writelines("#SBATCH --job-name=main_{}\n".format(model))
+            fh.writelines("#SBATCH --job-name=continuous_{}\n".format(model))
             fh.writelines("#SBATCH --qos=qos_gpu-t3\n")
-            fh.writelines("#SBATCH --output=main_{}%_%j.out\n".format(model))
-            fh.writelines("#SBATCH --error=main_{}%_%j.out\n".format(model))
+            fh.writelines("#SBATCH --output=continuous_{}%_%j.out\n".format(model))
+            fh.writelines("#SBATCH --error=continuous_{}%_%j.out\n".format(model))
             fh.writelines("#SBATCH --time=19:59:59\n")
             fh.writelines("#SBATCH --ntasks=24\n")
             fh.writelines("#SBATCH --ntasks-per-node=1\n")
@@ -45,17 +45,8 @@ for i in range(nb_seeds):
             fh.writelines("export OMPI_MCA_btl_openib_warn_default_gid_prefix=0\n")
             fh.writelines("export OMPI_MCA_mpi_warn_on_fork=0\n")
 
-            fh.writelines("srun python -u -B train.py --algo 'semantic' --n-blocks 5 --n-epochs 1000 --n-cycles 50 --n-batches 30 --architecture {} --save-dir '{}/' 2>&1 ".format(model, model))
+            fh.writelines("srun python -u -B train.py --algo 'continuous' --n-blocks 5 --n-epochs 1000 --n-cycles 50 --n-batches 30 --architecture {} --save-dir 'continuous_{}/' 2>&1 ".format(model, model))
 
         os.system("sbatch %s" % job_file)
         sleep(1)
-
-
-##SBATCH --nodes=2
-
-
-
-
-
-
-
+        

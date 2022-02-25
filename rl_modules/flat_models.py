@@ -2,94 +2,95 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
+from rl_modules.networks import GaussianPolicyFlat, QNetworkFlat
 
-LOG_SIG_MAX = 2
-LOG_SIG_MIN = -20
 epsilon = 1e-6
-LATENT = 3
 
 
-# Initialize Policy weights
-def weights_init_(m):
-    if isinstance(m, nn.Linear):
-        torch.nn.init.xavier_uniform_(m.weight, gain=1)
-        torch.nn.init.constant_(m.bias, 0)
+class FlatCritic(nn.Module):
+    def __init__(self, dim_inp, dim_out):
+        super(FlatCritic, self).__init__()
 
+        self.model = QNetworkFlat(dim_inp, dim_out)
 
-class QNetworkFlat(nn.Module):
-    def __init__(self, env_params):
-        super(QNetworkFlat, self).__init__()
+    def forward(self, obs, act, ag, g):
+        batch_size = obs.shape[0]
+        assert batch_size == len(obs)
 
-        # Q1 architecture
-        self.linear1 = nn.Linear(env_params['obs'] + 2 * env_params['goal'] + env_params['action'], 256)
-        self.linear2 = nn.Linear(256, 256)
-        self.linear3 = nn.Linear(256, 1)
+        delta_g = g - ag
 
-        # Q2 architecture
-        self.linear4 = nn.Linear(env_params['obs'] + 2 * env_params['goal'] + env_params['action'], 256)
-        self.linear5 = nn.Linear(256, 256)
-        self.linear6 = nn.Linear(256, 1)
+        inp_state = torch.cat([obs, delta_g], dim=-1)
 
-        self.apply(weights_init_)
+        q1_pi_tensor, q2_pi_tensor = self.model(inp_state, act)
 
-    def forward(self, state, action):
-        xu = torch.cat([state, action], 1)
+        return q1_pi_tensor, q2_pi_tensor
 
-        x1 = F.relu(self.linear1(xu))
-        x1 = F.relu(self.linear2(x1))
-        x1 = self.linear3(x1)
+class FlatActor(nn.Module):
+    def __init__(self, dim_inp, dim_out):
+        super(FlatActor, self).__init__()
 
-        x2 = F.relu(self.linear4(xu))
-        x2 = F.relu(self.linear5(x2))
-        x2 = self.linear6(x2)
+        self.model = GaussianPolicyFlat(dim_inp, dim_out)
 
-        return x1, x2
+    def forward(self, obs, ag, g):
+        batch_size = obs.shape[0]
+        assert batch_size == len(obs)
 
+        delta_g = g - ag
 
-class GaussianPolicyFlat(nn.Module):
-    def __init__(self, env_params, action_space=None):
-        super(GaussianPolicyFlat, self).__init__()
+        inp = torch.cat([obs, delta_g], dim=-1)
 
-        self.linear1 = nn.Linear(env_params['obs'] + 2 * env_params['goal'], 256)
-        self.linear2 = nn.Linear(256, 256)
+        mean, logstd = self.model(inp)
+        return mean, logstd
 
-        self.mean_linear = nn.Linear(256, env_params['action'])
-        self.log_std_linear = nn.Linear(256, env_params['action'])
-
-        self.apply(weights_init_)
-
-        # action rescaling
-        if action_space is None:
-            self.action_scale = torch.tensor(1.)
-            self.action_bias = torch.tensor(0.)
-        else:
-            self.action_scale = torch.FloatTensor(
-                (action_space.high - action_space.low) / 2.)
-            self.action_bias = torch.FloatTensor(
-                (action_space.high + action_space.low) / 2.)
-
-    def forward(self, state):
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        mean = self.mean_linear(x)
-        log_std = self.log_std_linear(x)
-        log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
-        return mean, log_std
-
-    def sample(self, state):
-        mean, log_std = self.forward(state)
+    def sample(self, obs, ag, g):
+        mean, log_std = self.forward(obs, ag, g)
         std = log_std.exp()
         normal = Normal(mean, std)
         x_t = normal.rsample()  # for reparameterization trick (mean + std * N(0,1))
         y_t = torch.tanh(x_t)
-        action = y_t * self.action_scale + self.action_bias
+        action = y_t
         log_prob = normal.log_prob(x_t)
         # Enforcing Action Bound
-        log_prob -= torch.log(self.action_scale * (1 - y_t.pow(2)) + epsilon)
-        log_prob = log_prob.sum(1, keepdim=True)
+        log_prob -= torch.log((1 - y_t.pow(2)) + epsilon)
+        log_prob = log_prob.sum(-1, keepdim=True)
         return action, log_prob, torch.tanh(mean)
 
-    def to(self, device):
-        self.action_scale = self.action_scale.to(device)
-        self.action_bias = self.action_bias.to(device)
-        return super(GaussianPolicyFlat, self).to(device)
+class FlatSemantic:
+    def __init__(self, env_params):
+        self.dim_obs = env_params['obs']
+        self.dim_goal = env_params['goal']
+        self.dim_act = env_params['action']
+
+        self.q1_pi_tensor = None
+        self.q2_pi_tensor = None
+        self.target_q1_pi_tensor = None
+        self.target_q2_pi_tensor = None
+        self.pi_tensor = None
+        self.log_prob = None
+
+        dim_actor_input = self.dim_obs + self.dim_goal
+        dim_actor_output = self.dim_act
+
+        dim_critic_input = self.dim_obs + self.dim_goal + self.dim_act
+        dim_critic_output = 1
+
+        self.critic = FlatCritic(dim_critic_input, dim_critic_output)
+        self.critic_target = FlatCritic(dim_critic_input, dim_critic_output)
+        self.actor = FlatActor(dim_actor_input, dim_actor_output)
+
+    def policy_forward_pass(self, obs, ag, g, no_noise=False):
+        if not no_noise:
+            self.pi_tensor, self.log_prob, _ = self.actor.sample(obs, ag, g)
+        else:
+            _, self.log_prob, self.pi_tensor = self.actor.sample(obs, ag, g)
+
+    def forward_pass(self, obs, ag, g, actions=None):
+        self.pi_tensor, self.log_prob, _ = self.actor.sample(obs, ag, g)
+
+        if actions is not None:
+            self.q1_pi_tensor, self.q2_pi_tensor = self.critic.forward(obs, self.pi_tensor, ag, g)
+            return self.critic.forward(obs, actions, ag, g)
+        else:
+            with torch.no_grad():
+                self.target_q1_pi_tensor, self.target_q2_pi_tensor = self.critic_target.forward(obs, self.pi_tensor, ag, g)
+            self.q1_pi_tensor, self.q2_pi_tensor = None, None
