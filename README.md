@@ -5,7 +5,11 @@ This repository contains the anonymized code associated to the *Learning Self-Su
 **Abstract**
 Although humans live in an open-ended world with endless challenges, they do not have to learn from scratch whenever they encounter a new task. Rather, they have access to a handful of previously learned skills, which they rapidly adapt to new situations. In artificial intelligence, autotelic agents—which are intrinsically motivated to represent and set their own goals—exhibit promising skill transfer capabilities. However, their learning capabilities are highly constrained by their policy and goal space representations. In this paper, we propose to investigate the impact of these representations. We study different implementations of autotelic agents using four types of Graph Neural Networks policy representations and two types of goal spaces, either geometric or predicate-based. We show that combining object-centered architectures that are expressive enough with semantic relational goals enables an efficient transfer between skills and promotes behavioral diversity. We also release our graph-based implementations to encourage further research in this direction.
 
-![alt text](https://ibb.co/64S22ZN)
+<p align="center">
+  <img src="https://i.ibb.co/zh7vmdk/graphs-v4.jpg" />
+</p>
+
+We model both the critic and the policy using four different GNN-based architectures: full graph networks, interaction networks, relation networks and deep sets. The code for each architecture can be found in the rl_modules/ folder. 
 
 **Requirements**
 
