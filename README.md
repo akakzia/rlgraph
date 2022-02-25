@@ -31,5 +31,16 @@ The following lines launch the training of our autotelic agents. When using sema
 
 ```mpirun -np 24 python train.py --algo continuous```
 
+To specify the GNN-based architecture to be used, refer to one of the following lines: 
+
+```mpirun -np 24 python train.py --architecture full_gn```
+
+```mpirun -np 24 python train.py --architecture interaction_network```
+
+```mpirun -np 24 python train.py --architecture relation_network```
+
+```mpirun -np 24 python train.py --architecture deep_sets```
+
+
 Note: The folder configs/ contains the hyper-parameters used for both types of goal spaces. 
 
