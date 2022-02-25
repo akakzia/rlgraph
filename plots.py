@@ -21,16 +21,12 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098],  [0.466, 0.674, 0.188], [0.9
           [0.466, 0.674, 0.8], [0.929, 0.04, 0.125],
           [0.3010, 0.245, 0.33], [0.635, 0.078, 0.184], [0.35, 0.78, 0.504]]
 
-# [[0, 0.447, 0.7410], [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],  # c2[0.85, 0.325, 0.098],[0.85, 0.325, 0.098],
-#  [0.494, 0.1844, 0.556], [209 / 255, 70 / 255, 70 / 255], [137 / 255, 145 / 255, 145 / 255],  # [0.3010, 0.745, 0.933],
-#  [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],
-#  [0.3010, 0.745, 0.933], [0.635, 0.078, 0.184]]
-
-RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/results/'
+RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/ablation_results/'
 SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
-TO_PLOT = ['semantic_goals']
+TO_PLOT = ['zpd_ablation']
 
-NB_CLASSES = 11 # 12 for 5 blocks
+NB_CLASSES = 11 # for semantic goals
+NB_CLASSES = 5 # for continuous goals
 
 LINE = 'mean'
 ERR = 'std'
@@ -58,7 +54,7 @@ COMPRESSOR = CompressPDF(4)
 
 
 def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
-    fig = plt.figure(figsize=(37, 20), frameon=False) # 34 18 for semantic
+    fig = plt.figure(figsize=(37, 20), frameon=False) # 34 18 for semantic 37 20 for the other
     ax = fig.add_subplot(111)
     ax.spines['top'].set_linewidth(6)
     ax.spines['right'].set_linewidth(6)
@@ -79,7 +75,7 @@ def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
     return artists, ax
 
 def setup_n_figs(n, m, xlabels=None, ylabels=None, xlims=None, ylims=None):
-    fig, axs = plt.subplots(n, m, figsize=(48, 12), frameon=False)
+    fig, axs = plt.subplots(n, m, figsize=(42, 18), frameon=False) # 48 12 for other
     axs = axs.ravel()
     artists = ()
     for i_ax, ax in enumerate(axs):
@@ -201,18 +197,29 @@ def plot_sr_av(max_len, experiment_path, folder):
 
 
 def plot_sr_av_all(max_len, experiment_path):
-    fig, artists, ax = setup_n_figs(n=1,
-                                   m=3, 
-                                #    xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
-                                #    ylabels= ['Success Rate', None] * 2,
-                                   xlabels = ['Episodes (x$10^3$)'] * 3,
-                                   ylabels = ['Success Rate', None, None],
+    fig, artists, ax = setup_n_figs(n=2,
+                                   m=2, 
+                                   xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
+                                   ylabels= ['Success Rate', None] * 2,
+                                #    xlabels = ['Episodes (x$10^3$)'] * 3,
+                                #    ylabels = ['Success Rate', None, None],
                                    xlims = [[-1, LIM] for _ in range(4)],
                                    ylims= [[-0.02, 1.03] for _ in range(4)]
         )
     # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
-    titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-DS']
-    for k, folder in enumerate(['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_deep_sets']):
+    # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-DS']
+    # folders_continuous = ['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_deep_sets']
+
+    # # Uncomment for Curriculum ablation
+    # titles = ['C-GN', 'C-IN', 'C-GN w/o Curr', 'C-IN w/o Curr']
+    # conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'curr_ablation_full_gn', 'curr_ablation_interaction_network_2']
+
+    # Uncomment for ZPD ablation
+    conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'zpd_ab_full_gn', 'zpd_ab_interaction_network_2']
+    titles = ['C-GN', 'C-IN', 'C-GN w/o ZPD', 'C-IN w/o ZPD']
+
+
+    for k, folder in enumerate(conditions):
         condition_path = experiment_path + folder + '/'
         list_runs = sorted(os.listdir(condition_path))
         global_sr = np.zeros([len(list_runs), max_len])
@@ -259,14 +266,14 @@ def plot_sr_av_all(max_len, experiment_path):
     leg = fig.legend(#['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$', '$S_4$', '$S_5$', 'Global'],
                     ['No Stacks', '$\widetilde{S}_2$', '$\widetilde{S}_3$', '$\widetilde{S}_4$', '$\widetilde{S}_5$', 'Global'],
                     loc='upper center',
-                    bbox_to_anchor=(0.525, 1.22),
+                    bbox_to_anchor=(0.525, 1.15),
                     ncol=6,
                     fancybox=True,
                     shadow=True,
                     prop={'size': 65, 'weight': 'normal'},
                     markerscale=1)
     artists += (leg,)
-    save_fig(path=SAVE_PATH + 'per_class.pdf', artists=artists)
+    save_fig(path=SAVE_PATH + 'per_class_zpd_ablation.pdf', artists=artists)
 
 
 def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=None, ref='with_init'):
@@ -361,118 +368,24 @@ if __name__ == '__main__':
         # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='continuous_full_gn')
 
         # Uncomment for semantic goals
-        conditions = ['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets', 'flat']
-        labels = ['S-GN', 'S-IN', 'S-RN', 'S-DS', 'S-Flat']
-        get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
+        # conditions = ['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets', 'flat']
+        # labels = ['S-GN', 'S-IN', 'S-RN', 'S-DS', 'S-Flat']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
 
-        # plot_sr_av(max_len, experiment_path, 'flat')
-        # plot_sr_av_all(max_len, experiment_path)
+        # # Uncomment for ZPD ablation
+        # conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'zpd_ab_full_gn', 'zpd_ab_interaction_network_2']
+        # labels = ['C-GN', 'C-IN', 'C-GN w/o ZPD', 'C-IN w/o ZPD']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='continuous_full_gn')
 
+        # # Uncomment for Curriculum ablation
+        # conditions = ['continuous_full_gn', 'continuous_interaction_network_2', 'curr_ablation_full_gn', 'curr_ablation_interaction_network_2']
+        # labels = ['C-GN', 'C-IN', 'C-GN w/o Curr', 'C-IN w/o Curr']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='continuous_full_gn')
 
-        # if PLOT == 'Architecture':
-        #     conditions = ['GANGSTR', 'Interaction Graph']
-        #     labels = ['GANGSTR', 'Interaction Graph']
-        #     get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='GANGSTR')
-        # elif PLOT == 'Rewards':
-        #     conditions = ['GANGSTR', 'sparse', 'incremental_per_relation', 'incremental_per_predicate']
-        #     labels = ['Per_object', 'Sparse', 'Per_relation', 'Per_predicate']
-        #     get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='GANGSTR')
-        # elif PLOT == 'Masks':
-        #     conditions = ['GANGSTR', 'opaque', 'initial']
-        #     labels = ['Hindsight', 'Opaque', 'Initial']
-        #     get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='GANGSTR')
-        # elif PLOT == 'Partial':
-        #     conditions = ['GANGSTR', 'GANGSTR_no_masks']
-        #     labels = ['GANGSTR', 'GANGSTR_no_masks']
-        #     get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='GANGSTR')
-        # elif PLOT == 'Scalability':
-        #     conditions = ['GANGSTR', 'GANGSTR_no_masks']
-        #     labels = ['GANGSTR', 'GANGSTR_no_masks']
-        #     get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='GANGSTR')
+        # Uncomment for Attention Ablation
+        # conditions = ['full_gn', 'interaction_network_2', 'attention_ablation_full_gn', 'attention_ablation_interaction_network_2']
+        # labels = ['S-GN', 'S-IN', 'S-GN w/o Att', 'S-IN w/o Att']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
 
-        # if PLOT == 'ablations':
-        #     max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        #     print('# epochs: {}, # seeds: {}'.format(min_len, min_seeds))
-        #     # plot_c_lp_p_sr(experiment_path)
-        #     conditions = ['DECSTR',
-        #                   'Flat',
-        #                   'Without Curriculum',
-        #                   'Without Symmetry',
-        #                   'Without ZPD']
-        #     labels =  ['DECSTR',
-        #                'Flat',
-        #                'w/o Curr.',
-        #                'w/o Asym.',
-        #                'w/o ZPD']
-        #     sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, conditions,labels,  ref='DECSTR')
-        # if PLOT == 'baselines':
-        #     max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        #     print('# epochs: {}, # seeds: {}'.format(min_len, min_seeds))
-        #     # plot_c_lp_p_sr(experiment_path)
-        #     conditions = ['DECSTR',
-        #                   'Expert Buckets',
-        #                   'Language Goals',
-        #                   'Positions Goals']
-        #     labels = ['DECSTR',
-        #                   'Exp. Buckets',
-        #                   'Lang. Goals',
-        #                   'Pos. Goals']
-        #     sr_per_cond_stats = get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='DECSTR')
-        #
-        # if PLOT == 'DECSTR':
-        #     max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        #     plot_c_lp_p_sr(experiment_path)
-        #
-        #     plot_sr_av(max_len, experiment_path, PLOT)
-        #     plot_lp_av(max_len, experiment_path, PLOT)
-        #
-        # if PLOT == 'PRE':
-        #     max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        #     plot_sr_av(max_len, experiment_path, PLOT)
-        #     plot_lp_av(max_len, experiment_path, PLOT)
-        #
-        # if PLOT == 'beta_vae':
-        #     path = '/home/flowers/Desktop/Scratch/sac_curriculum/language/data/results_k_study.pk'
-        #
-        #     with open(path, 'rb') as f:
-        #         data = pickle.load(f)
-        #
-        #     beta = [0.5, 0.6, 0.7, 0.8, 0.9, 1]
-        #     prop_valid = data[:, :, :, 1].mean(axis=1)
-        #     prop_valid_std = data[:, :, :, 1].std(axis=1)
-        #
-        #     coverage = data[:, :, :, -2].mean(axis=1)
-        #     coverage_std = data[:, :, :, -2].std(axis=1)
-        #
-        #     legends = ['Train 1', 'Test 2', 'Test 3', 'Test 4', 'Test 5']
-        #     artists, ax = setup_figure(xlabel=r'$\beta$',
-        #                                ylabel='Probability valid goal')
-        #     for i in range(len(legends)):
-        #         ax.plot(beta, prop_valid[:, i], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-        #         ax.fill_between(beta, prop_valid[:, i] - prop_valid_std[:, i], prop_valid[:, i] + prop_valid_std[:, i], color=colors[i], alpha=ALPHA)
-        #     leg = plt.legend(legends,
-        #                      loc='upper center',
-        #                      bbox_to_anchor=(0.5, 1.25),
-        #                      ncol=3,
-        #                      fancybox=True,
-        #                      shadow=True,
-        #                      prop={'size': 35, 'weight': 'bold'},
-        #                      markerscale=1)
-        #     ax.set_xticks(beta)
-        #     save_fig(path=SAVE_PATH + PLOT + '_proba_valid.pdf', artists=artists)
-        #
-        #     artists, ax = setup_figure(xlabel=r'$\beta$',
-        #                                ylabel='Coverage valid goals')
-        #     for i in range(len(legends)):
-        #         ax.plot(beta, coverage[:, i], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-        #         ax.fill_between(beta, coverage[:, i] - coverage_std[:, i], coverage[:, i] + coverage_std[:, i], color=colors[i], alpha=ALPHA)
-        #     ax.set_xticks(beta)
-        #     leg = plt.legend(legends,
-        #                      loc='upper center',
-        #                      bbox_to_anchor=(0.5, 1.25),
-        #                      ncol=3,
-        #                      fancybox=True,
-        #                      shadow=True,
-        #                      prop={'size': 35, 'weight': 'bold'},
-        #                      markerscale=1)
-        #     save_fig(path=SAVE_PATH + PLOT + '_coverage.pdf', artists=artists)
+        # plot_sr_av(max_len, experiment_path, 'curr_ablation_full_gn')
+        plot_sr_av_all(max_len, experiment_path)
