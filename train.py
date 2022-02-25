@@ -10,7 +10,7 @@ from rl_modules.rl_agent import RLAgent
 import random
 from rollout import RolloutWorker
 from goal_sampler import GoalSampler
-from utils import init_storage, get_eval_goals
+from utils import init_storage
 import time
 from mpi_utils import logger
 
@@ -32,7 +32,13 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
-    args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
+    if args.algo == 'continuous':
+        args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
+    else: 
+        args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+        args.zpd_management = False
+        args.use_curriculum = False
+    
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -93,13 +99,15 @@ def launch(args):
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
                                                        self_eval=self_eval,
                                                        true_eval=False,  # these are not offline evaluation episodes
-                                                       animated=False,
+                                                       biased_init=args.zpd_management, # Use biased initializations as part of ZPD management scheme
                                                       )
             time_dict['rollout'] += time.time() - t_i
 
             # Goal Sampler updates
             t_i = time.time()
-            episodes = goal_sampler.update(episodes)
+            if args.use_curriculum:
+                # Update successes and failures using rollouts aggregated accross workers
+                episodes = goal_sampler.update(episodes)
             time_dict['gs_update'] += time.time() - t_i
 
             # Storing episodes
@@ -120,9 +128,11 @@ def launch(args):
             time_dict['policy_train'] += time.time() - t_i
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
-        if rank == 0:
-            goal_sampler.update_lp()
-        goal_sampler.sync()
+        if args.use_curriculum:
+            # Update LP estimation based on goal sampler's successes and failures
+            if rank == 0:
+                goal_sampler.update_lp()
+            goal_sampler.sync()
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
 
@@ -131,12 +141,11 @@ def launch(args):
             # Performing evaluations
             t_i = time.time()
             eval_goals = []
-            eval_goals = goal_sampler.sample_goal(evaluation=True)
+            eval_goals, _ = goal_sampler.sample_goal(evaluation=True)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
-                                                       self_eval=self_eval,
+                                                       self_eval=True,
                                                        true_eval=True,  # this is offline evaluations
-                                                       biased_init=False, 
-                                                       animated=False
+                                                       biased_init=False
                                                        )
 
             results = np.array([e['success'][-1].astype(np.float32) for e in episodes])

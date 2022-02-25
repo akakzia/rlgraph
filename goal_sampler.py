@@ -3,11 +3,6 @@ from utils import get_idxs_per_relation
 from mpi4py import MPI
 
 
-N_POINTS = 42
-QUEUE_LENGTH = 1000
-EPSILON = 0.1 # When sampling from buffer, proba to sample randomly (not using LP)
-
-
 class GoalSampler:
     def __init__(self, args):
         self.num_rollouts_per_mpi = args.num_rollouts_per_mpi
@@ -15,12 +10,19 @@ class GoalSampler:
         self.n_classes = 5
         self.goal_dim = args.env_params['goal']
 
-        # LP quantities
-        self.successes_and_failures = [[] for _ in range(self.n_classes)]
-        self.LP = np.zeros([self.n_classes])
-        self.C = np.zeros([self.n_classes])
-        self.p = np.ones([self.n_classes]) / self.n_classes
-        self.self_eval_prob = 0.1
+        self.use_curriculum = args.use_curriculum
+
+        if self.use_curriculum:
+            self.self_eval_prob = args.self_eval_prob
+            self.queue_length = args.queue_length
+            self.n_minimum_points = args.n_minimum_points
+            self.epsilon_buffer = args.epsilon_buffer
+
+            # LP quantities
+            self.successes_and_failures = [[] for _ in range(self.n_classes)]
+            self.LP = np.zeros([self.n_classes])
+            self.C = np.zeros([self.n_classes])
+            self.p = np.ones([self.n_classes]) / self.n_classes
 
         self.init_stats()
 
@@ -30,14 +32,21 @@ class GoalSampler:
         evaluation controls whether or not to sample the goal uniformly or according to curriculum
         """
         if evaluation:
-            return np.array([0, 1, 2, 3, 4])
+            return np.array([0, 1, 2, 3, 4]), True
         else:
-            # decide whether to self evaluate
-            self_eval = True if np.random.random() < self.self_eval_prob else False
-            if self_eval:
-                goals = np.random.choice(range(self.n_classes), size=n_goals)
+            if self.use_curriculum:
+                # decide whether to self evaluate
+                self_eval = True if np.random.random() < self.self_eval_prob else False
+                if self_eval:
+                    # Choose uniformly
+                    goals = np.random.choice(range(self.n_classes), size=n_goals)
+                else:
+                    # Choose according to LP
+                    goals = np.random.choice(range(self.n_classes), p=self.p, size=n_goals)
             else:
-                goals = np.random.choice(range(self.n_classes), p=self.p, size=n_goals)
+                # Choose one class uniformly (without LP)
+                self_eval = False
+                goals = np.random.choice(range(self.n_classes), size=n_goals)
 
         return goals, self_eval
     
@@ -58,8 +67,8 @@ class GoalSampler:
                         success = 0
                     self.successes_and_failures[e['goal_class']].append(success)
                     # Make sure not to excede queue length
-                    if len(self.successes_and_failures[e['goal_class']]) > QUEUE_LENGTH:
-                        self.successes_and_failures = self.successes_and_failures[-QUEUE_LENGTH:]
+                    if len(self.successes_and_failures[e['goal_class']]) > self.queue_length:
+                        self.successes_and_failures = self.successes_and_failures[-self.queue_length:]
         self.sync()
 
         return episodes
@@ -70,7 +79,7 @@ class GoalSampler:
             # Compute C and LP per class
             for k in range(self.n_classes):
                 n_points = len(self.successes_and_failures[k])
-                if n_points > N_POINTS:
+                if n_points > self.n_minimum_points:
                     sf = np.array(self.successes_and_failures[k])
                     self.C[k] = np.mean(sf[n_points // 2:])
                     self.LP[k] = np.abs(np.sum(sf[n_points // 2:]) - np.sum(sf[: n_points // 2])) / n_points
@@ -100,7 +109,7 @@ class GoalSampler:
         if np.sum(LP) == 0:
             p = np.ones([self.n_classes]) / self.n_classes
         else:
-            p = EPSILON *  np.ones([self.n_classes]) / self.n_classes + (1 - EPSILON) * LP / LP.sum()
+            p = self.epsilon_buffer *  np.ones([self.n_classes]) / self.n_classes + (1 - self.epsilon_buffer) * LP / LP.sum()
         if p.sum() > 1:
             p[np.argmax(p)] -= p.sum() - 1
         elif p.sum() < 1:
@@ -115,9 +124,10 @@ class GoalSampler:
         for i in np.arange(1, self.n_classes+1):
             self.stats['Eval_SR_{}'.format(i)] = []
             self.stats['Av_Rew_{}'.format(i)] = []
-            self.stats['LP_{}'.format(i)] = []
-            self.stats['C_{}'.format(i)] = []
-            self.stats['p_{}'.format(i)] = []
+            if self.use_curriculum:
+                self.stats['LP_{}'.format(i)] = []
+                self.stats['C_{}'.format(i)] = []
+                self.stats['p_{}'.format(i)] = []
         self.stats['epoch'] = []
         self.stats['episodes'] = []
         self.stats['global_sr'] = []
@@ -135,6 +145,7 @@ class GoalSampler:
         for g_id in np.arange(1, len(av_res) + 1):
             self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
             self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])
-            self.stats['LP_{}'.format(g_id)].append(self.LP[g_id-1])
-            self.stats['C_{}'.format(g_id)].append(self.C[g_id-1])
-            self.stats['p_{}'.format(g_id)].append(self.p[g_id-1])
+            if self.use_curriculum:
+                self.stats['LP_{}'.format(g_id)].append(self.LP[g_id-1])
+                self.stats['C_{}'.format(g_id)].append(self.C[g_id-1])
+                self.stats['p_{}'.format(g_id)].append(self.p[g_id-1])
