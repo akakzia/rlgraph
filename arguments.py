@@ -16,10 +16,10 @@ def get_args():
     parser.add_argument('--num-workers', type=int, default=MPI.COMM_WORLD.Get_size(), help='the number of cpus to collect samples')
     parser.add_argument('--cuda', action='store_true', help='if use gpu do the acceleration')
     # the environment arguments
-    parser.add_argument('--algo', type=str, default='continuous', help="'semantic', 'continuous'")
+    parser.add_argument('--algo', type=str, default='semantic', help="'semantic', 'continuous'")
     parser.add_argument('--agent', type=str, default='SAC', help='the RL algorithm name')
     parser.add_argument('--n-blocks', type=int, default=5, help='The number of blocks to be considered in the FetchManipulate env')
-    parser.add_argument('--zpd-management', type=bool, default=True, help='Use biased initialization as part of ZPD management scheme')
+    parser.add_argument('--zpd-management', type=bool, default=False, help='Use biased initialization as part of ZPD management scheme')
     # the training arguments
     parser.add_argument('--n-epochs', type=int, default=200, help='the number of epochs to train the agent')
     parser.add_argument('--n-cycles', type=int, default=50, help='the times to collect samples per epoch')
@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--num-rollouts-per-mpi', type=int, default=2, help='the rollouts per mpi')
     parser.add_argument('--batch-size', type=int, default=256, help='the sample batch size')
     # the replay arguments
-    parser.add_argument('--multi-criteria-her', type=bool, default=True, help='test')
+    parser.add_argument('--multi-criteria-her', type=bool, default=True, help='Use multi-criteria HER')
     parser.add_argument('--replay-strategy', type=str, default='future', help='the HER strategy')
     parser.add_argument('--replay-k', type=int, default=4, help='ratio to be replace')
     parser.add_argument('--reward-type', type=str, default='per_object', help='per_object, per_relation, per_predicate or sparse')
@@ -42,7 +42,7 @@ def get_args():
     parser.add_argument('--polyak', type=float, default=0.95, help='the average coefficient')
     parser.add_argument('--freq-target_update', type=int, default=2, help='the frequency of updating the target networks')
     # The Curriculum Learning Arguments 
-    parser.add_argument('--use-curriculum', type=bool, default=True, help='Apply LP based curriculum learning with continuous goals')
+    parser.add_argument('--use-curriculum', type=bool, default=False, help='Apply LP based curriculum learning with continuous goals')
     parser.add_argument('--self-eval-prob', type=float, default=0.1, help='Probability of self evaluation to update LP stats')
     parser.add_argument('--queue-length', type=int, default=1000, help='The window length of LP estimations')
     parser.add_argument('--n-minimum-points', type=int, default=42, help='Minimum number of points to start performing LP estimations')
