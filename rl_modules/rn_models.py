@@ -178,13 +178,14 @@ class RnSemantic:
         self.log_prob = None
 
         # Process indexes for graph construction
-        self.edges, self.incoming_edges, _ = get_graph_structure(self.nb_objects)
-        goal_ids_per_object = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
-        perm = permutations(np.arange(self.nb_objects), 2)
-        self.predicate_ids = []
-        for p in perm:
-            # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
-            self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
+        self.edges, self.incoming_edges, self.predicate_ids = get_graph_structure(self.nb_objects)
+        if args.algo == 'continuous':
+            goal_ids_per_object = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
+            perm = permutations(np.arange(self.nb_objects), 2)
+            self.predicate_ids = []
+            for p in perm:
+                # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+                self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
 
         dim_edge_features = len(self.predicate_ids[0])
 

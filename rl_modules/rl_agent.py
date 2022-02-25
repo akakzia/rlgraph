@@ -39,9 +39,6 @@ class RLAgent:
         elif self.architecture == 'interaction_network':
             from rl_modules.interaction_models import InSemantic
             self.model = InSemantic(self.env_params, args)
-        elif self.architecture == 'interaction_network_2':
-            from rl_modules.interaction_models_v2 import GnSemantic
-            self.model = GnSemantic(self.env_params, args)
         elif self.architecture == 'full_gn':
             from rl_modules.gn_models import GnSemantic
             self.model = GnSemantic(self.env_params, args)

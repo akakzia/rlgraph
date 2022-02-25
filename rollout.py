@@ -1,5 +1,10 @@
 import numpy as np
 
+
+def is_success(ag, g):
+    return (ag == g).all()
+
+
 def at_least_one_fallen(observation, n):
     """ Given a observation, returns true if at least one object has fallen """
     dim_body = 10
@@ -8,7 +13,6 @@ def at_least_one_fallen(observation, n):
     obs_z = obs_objects[:, 2]
 
     return (obs_z < 0.4).any()
-
 
 
 class RolloutWorker:
@@ -51,7 +55,10 @@ class RolloutWorker:
                 obs_new = observation_new['observation']
                 ag_new = observation_new['achieved_goal']
                 ag_new_bin = observation_new['achieved_goal_binary']
-                success = info['is_success']
+                if self.continuous:
+                    success = info['is_success']
+                else: 
+                    success = is_success(ag_new, g)
 
                 # Append rollouts
                 ep_obs.append(obs.copy())
@@ -77,8 +84,9 @@ class RolloutWorker:
                            success=np.array(ep_success).copy(),
                            rewards=np.array(ep_rewards).copy())
             
-            episode['goal_class'] = goals[i]
             episode['self_eval'] = self_eval
+            if self.continuous:
+                episode['goal_class'] = goals[i]
 
             episodes.append(episode)
 

@@ -10,7 +10,7 @@ from rl_modules.rl_agent import RLAgent
 import random
 from rollout import RolloutWorker
 from goal_sampler import GoalSampler
-from utils import init_storage
+from utils import init_storage, get_eval_goals
 import time
 from mpi_utils import logger
 
@@ -105,8 +105,9 @@ def launch(args):
 
             # Goal Sampler updates
             t_i = time.time()
-            if args.use_curriculum:
+            if args.use_curriculum or args.algo == 'semantic':
                 # Update successes and failures using rollouts aggregated accross workers
+                # Or update set of discovered goals for semantic goals
                 episodes = goal_sampler.update(episodes)
             time_dict['gs_update'] += time.time() - t_i
 
@@ -141,7 +142,15 @@ def launch(args):
             # Performing evaluations
             t_i = time.time()
             eval_goals = []
-            eval_goals, _ = goal_sampler.sample_goal(evaluation=True)
+            if args.algo == 'semantic':
+                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'stack_3', '2stacks_2_2', '2stacks_2_3', 'pyramid_3',
+                                'mixed_2_3', 'stack_4', 'stack_5']
+                for instruction in instructions:
+                    eval_goal = get_eval_goals(instruction, n=args.n_blocks)
+                    eval_goals.append(eval_goal.squeeze(0))
+                eval_goals = np.array(eval_goals)
+            else:
+                eval_goals, _ = goal_sampler.sample_goal(evaluation=True)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
                                                        self_eval=True,
                                                        true_eval=True,  # this is offline evaluations

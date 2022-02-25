@@ -1,6 +1,5 @@
 import numpy as np
-from scipy.linalg import block_diag
-from utils import get_idxs_per_relation, get_idxs_per_object
+from utils import get_idxs_per_object
 
 
 class her_sampler:
@@ -12,9 +11,20 @@ class her_sampler:
             self.future_p = 1 - (1. / (1 + args.replay_k))
         else:
             self.future_p = 0
-        self.reward_func = reward_func
         self.multi_criteria_her = args.multi_criteria_her
-        self.obj_ind = np.array([np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)])
+        if args.algo == 'continuous':
+            self.per_object_goal_ids = np.array([np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)])
+            self.reward_func = reward_func
+        else:
+            self.per_object_goal_ids = get_idxs_per_object(n=args.n_blocks)
+            self.reward_func = self.compute_reward_semantic
+    
+    def compute_reward_semantic(self, ag, g, info=None):
+        reward = 0.
+        for subgoal in self.per_object_goal_ids:
+            if (ag[subgoal] == g[subgoal]).all():
+                reward = reward + 1.
+        return reward
 
     def sample_her_transitions(self, episode_batch, batch_size_in_transitions):
         T = episode_batch['actions'].shape[1]
@@ -27,7 +37,7 @@ class her_sampler:
         transitions = {key: episode_batch[key][episode_idxs, t_samples].copy() for key in episode_batch.keys()}
 
         if self.multi_criteria_her:
-            for sub_goal in self.obj_ind:
+            for sub_goal in self.per_object_goal_ids:
                 her_indexes = np.where(np.random.uniform(size=batch_size) < self.future_p)
                 future_offset = np.random.uniform(size=batch_size) * (T - t_samples)
                 future_offset = future_offset.astype(int)

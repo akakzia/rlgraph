@@ -7,10 +7,16 @@ class GoalSampler:
     def __init__(self, args):
         self.num_rollouts_per_mpi = args.num_rollouts_per_mpi
         self.rank = MPI.COMM_WORLD.Get_rank()
-        self.n_classes = 5
+        self.n_classes = 11 if args.algo == 'semantic' else 5
         self.goal_dim = args.env_params['goal']
+        self.algo = args.algo
 
-        self.use_curriculum = args.use_curriculum
+        if self.algo == 'semantic':
+            self.discovered_goals = []
+            self.discovered_goals_str = []
+            self.use_curriculum = False
+        else:
+            self.use_curriculum = args.use_curriculum
 
         if self.use_curriculum:
             self.self_eval_prob = args.self_eval_prob
@@ -31,44 +37,64 @@ class GoalSampler:
         Sample n_goals goals to be targeted during rollouts
         evaluation controls whether or not to sample the goal uniformly or according to curriculum
         """
-        if evaluation:
-            return np.array([0, 1, 2, 3, 4]), True
-        else:
-            if self.use_curriculum:
-                # decide whether to self evaluate
-                self_eval = True if np.random.random() < self.self_eval_prob else False
-                if self_eval:
-                    # Choose uniformly
-                    goals = np.random.choice(range(self.n_classes), size=n_goals)
-                else:
-                    # Choose according to LP
-                    goals = np.random.choice(range(self.n_classes), p=self.p, size=n_goals)
+        if self.algo == 'semantic':
+            if evaluation and len(self.discovered_goals) > 0:
+                goals = np.random.choice(self.discovered_goals, size=self.num_rollouts_per_mpi)
             else:
-                # Choose one class uniformly (without LP)
-                self_eval = False
-                goals = np.random.choice(range(self.n_classes), size=n_goals)
+                if len(self.discovered_goals) == 0:
+                    goals = np.random.choice([-1., 1.], size=(n_goals, self.goal_dim))
+                else:
+                    # sample uniformly from discovered goals
+                    goal_ids = np.random.choice(range(len(self.discovered_goals)), size=n_goals)
+                    goals = np.array(self.discovered_goals)[goal_ids]
+            return goals, False
+        else:
+            if evaluation:
+                return np.array([0, 1, 2, 3, 4]), True
+            else:
+                if self.use_curriculum:
+                    # decide whether to self evaluate
+                    self_eval = True if np.random.random() < self.self_eval_prob else False
+                    if self_eval:
+                        # Choose uniformly
+                        goals = np.random.choice(range(self.n_classes), size=n_goals)
+                    else:
+                        # Choose according to LP
+                        goals = np.random.choice(range(self.n_classes), p=self.p, size=n_goals)
+                else:
+                    # Choose one class uniformly (without LP)
+                    self_eval = False
+                    goals = np.random.choice(range(self.n_classes), size=n_goals)
 
-        return goals, self_eval
+            return goals, self_eval
     
     def update(self, episodes):
         """ Update the successes and failures """
         all_episodes = MPI.COMM_WORLD.gather(episodes, root=0)
 
         if self.rank == 0:
-            all_episode_list = []
-            for eps in all_episodes:
-                all_episode_list += eps
+            all_episode_list = [e for eps in all_episodes for e in eps]
+
+            if self.algo == 'semantic':
+                # update discovered goals
+                for e in all_episode_list:
+                    # Add last achieved goal to memory if first time encountered
+                    if str(e['ag'][-1]) not in self.discovered_goals_str:
+                        self.discovered_goals.append(e['ag'][-1].copy())
+                        self.discovered_goals_str.append(str(e['ag'][-1]))
             
-            for e in all_episode_list:
-                if e['self_eval']:
-                    if (e['rewards'][-1] == 5.):
-                        success = 1
-                    else:
-                        success = 0
-                    self.successes_and_failures[e['goal_class']].append(success)
-                    # Make sure not to excede queue length
-                    if len(self.successes_and_failures[e['goal_class']]) > self.queue_length:
-                        self.successes_and_failures = self.successes_and_failures[-self.queue_length:]
+            else:
+                # update successes and failures
+                for e in all_episode_list:
+                    if e['self_eval']:
+                        if (e['rewards'][-1] == 5.):
+                            success = 1
+                        else:
+                            success = 0
+                        self.successes_and_failures[e['goal_class']].append(success)
+                        # Make sure not to excede queue length
+                        if len(self.successes_and_failures[e['goal_class']]) > self.queue_length:
+                            self.successes_and_failures = self.successes_and_failures[-self.queue_length:]
         self.sync()
 
         return episodes
@@ -98,10 +124,16 @@ class GoalSampler:
                 self.p[-1] = 1 - self.p[:-1].sum()
     
     def sync(self):
-        """ Synchronize C, LP and p accross different workers """
-        self.p = MPI.COMM_WORLD.bcast(self.p, root=0)
-        self.LP = MPI.COMM_WORLD.bcast(self.LP, root=0)
-        self.C = MPI.COMM_WORLD.bcast(self.C, root=0)
+        """ Synchronize data accross different workers """
+        if self.algo == 'semantic':
+            # Synchronize set of discovered goals
+            self.discovered_goals = MPI.COMM_WORLD.bcast(self.discovered_goals, root=0)
+            self.discovered_goals_str = MPI.COMM_WORLD.bcast(self.discovered_goals_str, root=0)
+        else:
+            # Synchronize LP estimations
+            self.p = MPI.COMM_WORLD.bcast(self.p, root=0)
+            self.LP = MPI.COMM_WORLD.bcast(self.LP, root=0)
+            self.C = MPI.COMM_WORLD.bcast(self.C, root=0)
 
     def build_batch(self, batch_size):
         LP = self.LP
@@ -131,6 +163,8 @@ class GoalSampler:
         self.stats['epoch'] = []
         self.stats['episodes'] = []
         self.stats['global_sr'] = []
+        if self.algo == 'semantic':
+            self.stats['nb_discovered'] = []
         keys = ['goal_sampler', 'rollout', 'gs_update', 'store', 'norm_update',
                 'policy_train', 'eval', 'epoch', 'total']
         for k in keys:
@@ -142,6 +176,8 @@ class GoalSampler:
         self.stats['global_sr'].append(global_sr)
         for k in time_dict.keys():
             self.stats['t_{}'.format(k)].append(time_dict[k])
+        if self.algo == 'semantic':
+            self.stats['nb_discovered'].append(len(self.discovered_goals))
         for g_id in np.arange(1, len(av_res) + 1):
             self.stats['Eval_SR_{}'.format(g_id)].append(av_res[g_id-1])
             self.stats['Av_Rew_{}'.format(g_id)].append(av_rew[g_id-1])

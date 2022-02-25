@@ -280,7 +280,7 @@ class FetchManipulateEnv(robot_env.RobotEnv):
         self.initial_gripper_xpos = self.sim.data.get_site_xpos('robot0:grip').copy()
         self.height_offset = self.sim.data.get_site_xpos('object0')[2]
 
-    def reset_goal(self, goal):
+    def reset_goal(self, goal, biased_init=False):
         """
         This function resets the environment and target the goal given as input
         Args:
