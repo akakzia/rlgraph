@@ -24,7 +24,7 @@ for i in range(nb_seeds):
 
             with open(job_file, 'w') as fh:
                 fh.writelines("#!/bin/bash\n")
-                fh.writelines("#SBATCH --account=kcr@gpu\n")
+                fh.writelines("#SBATCH --account=kcr@v100\n")
                 fh.writelines(f'#SBATCH --job-name=transfer_{model:s}_{id:d}\n')
                 fh.writelines("#SBATCH --qos=qos_gpu-t3\n")
                 fh.writelines(f'#SBATCH --output=transfer_{model:s}_{id:d}%_%j.out\n')
@@ -35,6 +35,7 @@ for i in range(nb_seeds):
                 fh.writelines("#SBATCH --gres=gpu:1\n")
                 fh.writelines("#SBATCH --hint=nomultithread\n")
                 fh.writelines("#SBATCH --array=0-0\n")
+                fh.writelines("#SBATCH --mem=40G\n")
 
                 fh.writelines("module load pytorch-gpu/py3/1.4.0\n")
 
