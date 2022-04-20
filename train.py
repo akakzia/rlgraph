@@ -1,9 +1,11 @@
+from re import S
 import torch
 import numpy as np
 from mpi4py import MPI
 import env
 import gym
 import os
+import pickle as pkl
 from arguments import get_args
 from rl_modules.rl_agent import RLAgent
 import random
@@ -31,7 +33,13 @@ def launch(args):
     t_total_init = time.time()
 
     # Make the environment
-    args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+    if args.algo == 'continuous':
+        args.env_name = 'FetchManipulate{}ObjectsContinuous-v0'.format(args.n_blocks)
+    else: 
+        args.env_name = 'FetchManipulate{}Objects-v0'.format(args.n_blocks)
+        args.zpd_management = False
+        args.use_curriculum = False
+    
     env = gym.make(args.env_name)
 
     # set random seeds for reproducibility
@@ -50,7 +58,12 @@ def launch(args):
 
     args.env_params = get_env_params(env)
 
-    goal_sampler = GoalSampler(args)
+    # Load test set for transfer learning study 
+    with open(f'./test_sets/test_set_{args.test_set_id}.pkl', 'rb') as f:
+        test_set_list = pkl.load(f)
+    if rank == 0: print(f'Loading test set {args.test_set_id:d}')
+
+    goal_sampler = GoalSampler(args, test_set_list)
 
     # Initialize RL Agent
     if args.agent == "SAC":
@@ -61,6 +74,7 @@ def launch(args):
     # Initialize Rollout Worker
     rollout_worker = RolloutWorker(env, policy, goal_sampler,  args)
 
+    
     # Main interaction loop
     episode_count = 0
     for epoch in range(args.n_epochs):
@@ -84,20 +98,23 @@ def launch(args):
 
             # Sample goals
             t_i = time.time()
-            goals = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False)
+            goals, self_eval = goal_sampler.sample_goal(n_goals=args.num_rollouts_per_mpi, evaluation=False) # These goals are overridden in rollout_worker
             time_dict['goal_sampler'] += time.time() - t_i
 
             # Environment interactions
             t_i = time.time()
             episodes = rollout_worker.generate_rollout(goals=goals,  # list of goal configurations
+                                                       self_eval=self_eval,
                                                        true_eval=False,  # these are not offline evaluation episodes
                                                       )
             time_dict['rollout'] += time.time() - t_i
 
             # Goal Sampler updates
             t_i = time.time()
-            if args.algo == 'semantic':
-                episodes = goal_sampler.update(episodes, episode_count)
+            if args.use_curriculum or args.algo == 'semantic':
+                # Update successes and failures using rollouts aggregated accross workers
+                # Or update set of discovered goals for semantic goals
+                episodes = goal_sampler.update(episodes)
             time_dict['gs_update'] += time.time() - t_i
 
             # Storing episodes
@@ -118,6 +135,11 @@ def launch(args):
             time_dict['policy_train'] += time.time() - t_i
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
+        if args.use_curriculum:
+            # Update LP estimation based on goal sampler's successes and failures
+            if rank == 0:
+                goal_sampler.update_lp()
+            goal_sampler.sync()
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
 
@@ -125,19 +147,23 @@ def launch(args):
             if rank==0: logger.info('\tRunning eval ..')
             # Performing evaluations
             t_i = time.time()
-            eval_goals = []
-            if args.n_blocks == 3:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'pyramid_3', 'stack_3']
-            elif args.n_blocks == 5:
-                instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'stack_3', '2stacks_2_2', '2stacks_2_3', 'pyramid_3',
-                                'mixed_2_3', 'stack_4', 'stack_5']
-            else:
-                raise NotImplementedError
-            for instruction in instructions:
-                eval_goal = get_eval_goals(instruction, n=args.n_blocks)
-                eval_goals.append(eval_goal.squeeze(0))
-            eval_goals = np.array(eval_goals)
+            if args.test_set_id != 1:
+                eval_goals = []
+                if args.algo == 'semantic':
+                    instructions = ['close_1', 'close_2', 'close_3', 'stack_2', 'stack_3', '2stacks_2_2', '2stacks_2_3', 'pyramid_3',
+                                    'mixed_2_3', 'stack_4', 'stack_5']
+                    for instruction in instructions:
+                        eval_goal = get_eval_goals(instruction, n=args.n_blocks)
+                        eval_goals.append(eval_goal.squeeze(0))
+                    eval_goals = np.array(eval_goals)
+                else:
+                    eval_goals, _ = goal_sampler.sample_goal(evaluation=True)
+            else: 
+                eval_goals_train = [np.fromstring(random.choice(list(ens))[1:-1], dtype=int, sep='. ').astype(np.float64) for ens in goal_sampler.train_set_list]
+                eval_goals_test = [np.fromstring(random.choice(list(ens))[1:-1], dtype=int, sep='. ').astype(np.float64) for ens in goal_sampler.test_set_list]
+                eval_goals = np.array(eval_goals_train + eval_goals_test)
             episodes = rollout_worker.generate_rollout(goals=eval_goals,
+                                                       self_eval=True,
                                                        true_eval=True,  # this is offline evaluations
                                                        )
 
