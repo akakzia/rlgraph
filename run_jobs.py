@@ -14,7 +14,7 @@ scratch = os.environ['SCRATCH']
 mkdir_p(job_directory)
 
 nb_seeds = 1
-models = ['full_gn', 'relation_network', 'deep_sets', 'interaction_network']
+models = ['full_gn', 'relation_network', 'deep_sets', 'interaction_network_2']
 test_ids = [1, 2, 3]
 
 for i in range(nb_seeds):
