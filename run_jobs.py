@@ -22,7 +22,7 @@ for i in range(nb_seeds):
 
         with open(job_file, 'w') as fh:
             fh.writelines("#!/bin/bash\n")
-            fh.writelines("#SBATCH --account=kcr@gpu\n")
+            fh.writelines("#SBATCH --account=kcr@v100\n")
             fh.writelines("#SBATCH --job-name=rebuttal_main_{}\n".format(model))
             fh.writelines("#SBATCH --qos=qos_gpu-t3\n")
             fh.writelines("#SBATCH --output=rebuttal_main_{}%_%j.out\n".format(model))
