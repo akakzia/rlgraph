@@ -17,6 +17,9 @@ from mpi_utils import logger
 
 EVAL_FREQ = 5
 
+# Perform data collection to make sure buffer contains episodes
+COLLECTION_CYCLES = 10
+
 def get_env_params(env):
     obs = env.reset()
 
@@ -82,6 +85,7 @@ def launch(args):
     
     # Main interaction loop
     episode_count = 0
+    per_mpi_episodes = 0
     for epoch in range(args.n_epochs):
         t_init = time.time()
 
@@ -114,6 +118,8 @@ def launch(args):
                                                       )
             time_dict['rollout'] += time.time() - t_i
 
+            per_mpi_episodes += args.num_rollouts_per_mpi
+
             # Goal Sampler updates
             t_i = time.time()
             if args.use_curriculum or args.algo == 'semantic':
@@ -135,8 +141,9 @@ def launch(args):
 
             # Policy updates
             t_i = time.time()
-            for _ in range(args.n_batches):
-                policy.train()
+            if per_mpi_episodes > COLLECTION_CYCLES:
+                for _ in range(args.n_batches):
+                    policy.train()
             time_dict['policy_train'] += time.time() - t_i
             episode_count += args.num_rollouts_per_mpi * args.num_workers
 
