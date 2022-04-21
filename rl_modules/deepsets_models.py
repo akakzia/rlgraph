@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.distributions import Normal
 from itertools import permutations
 import numpy as np
-from rl_modules.networks import GnnMessagePassing, PhiCriticDeepSet, PhiActorDeepSet, RhoActorDeepSet, RhoCriticDeepSet, SelfAttention
+from rl_modules.networks import PhiCriticDeepSet, PhiActorDeepSet, RhoActorDeepSet, RhoCriticDeepSet, SelfAttention, PhiCriticDeepSetTwoHeads
 from utils import get_idxs_per_object
 
 epsilon = 1e-6
@@ -21,7 +21,8 @@ class DsCritic(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.phi_critic = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
+        self.phi_critic_1 = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
+        self.phi_critic_2 = PhiCriticDeepSetTwoHeads(dim_phi_critic_output, 256, dim_phi_critic_output)
         self.node_self_attention = SelfAttention(dim_phi_critic_output, 1)  # test 1 attention heads
         self.rho_critic = RhoCriticDeepSet(dim_rho_critic_input, dim_rho_critic_output)
 
@@ -39,13 +40,14 @@ class DsCritic(nn.Module):
 
         inp = torch.stack([torch.cat([act, obs_body, obj, delta_g[:, self.semantic_ids[i]]], dim=1) for i, obj in enumerate(obs_objects)])
 
-        output_phi_critic_1, output_phi_critic_2 = self.phi_critic(inp)
-        output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
-        output_self_attention_1 = self.node_self_attention(output_phi_critic_1)
+        output_phi_critic_1, output_phi_critic_2 = self.phi_critic_1(inp)
+        output_add_1, output_add_2 = self.phi_critic_2(output_phi_critic_1, output_phi_critic_2)
+        output_add_1 = output_add_1.permute(1, 0, 2)
+        output_self_attention_1 = self.node_self_attention(output_add_1)
         output_self_attention_1 = output_self_attention_1.sum(dim=1)
 
-        output_phi_critic_2 = output_phi_critic_2.permute(1, 0, 2)
-        output_self_attention_2 = self.node_self_attention(output_phi_critic_2)
+        output_add_2 = output_add_2.permute(1, 0, 2)
+        output_self_attention_2 = self.node_self_attention(output_add_2)
         output_self_attention_2 = output_self_attention_2.sum(dim=1)
 
         q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_self_attention_1, output_self_attention_2)
@@ -62,7 +64,8 @@ class DsActor(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.phi_actor = PhiActorDeepSet(dim_phi_actor_input, 256, dim_phi_actor_output)
+        self.phi_actor_1 = PhiActorDeepSet(dim_phi_actor_input, 256, dim_phi_actor_output)
+        self.phi_actor_2 = PhiActorDeepSet(dim_phi_actor_output, 256, dim_phi_actor_output)
         self.self_attention = SelfAttention(dim_phi_actor_output, 1) # test 1 attention heads
         self.rho_actor = RhoActorDeepSet(dim_rho_actor_input, dim_rho_actor_output)
 
@@ -80,7 +83,8 @@ class DsActor(nn.Module):
 
         inp = torch.stack([torch.cat([obs_body, obj, delta_g[:, self.semantic_ids[i]]], dim=1) for i, obj in enumerate(obs_objects)])
 
-        output_phi_actor = self.phi_actor(inp)
+        output_phi_actor_1 = self.phi_actor_1(inp)
+        output_phi_actor = self.phi_actor_2(output_phi_actor_1)
         output_phi_actor = output_phi_actor.permute(1, 0, 2)
         output_self_attention = self.self_attention(output_phi_actor)
         output_self_attention = output_self_attention.sum(dim=1)
