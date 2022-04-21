@@ -47,6 +47,8 @@ class ReplayBuffer:
                     self.buffer['actions'][idxs[i]] = e['act']
                     if self.goal_sampler.algo == 'continuous':
                         self.goal_ids[idxs[i]] = e['goal_class']
+                else:
+                    self.current_size -= 1
 
     # sample the data from the replay buffer
     def sample(self, batch_size):
