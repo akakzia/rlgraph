@@ -15,7 +15,7 @@ mkdir_p(job_directory)
 
 nb_seeds = 1
 models = ['full_gn', 'relation_network', 'deep_sets', 'interaction_network']
-test_ids = [2, 3]
+test_ids = [1, 2, 3]
 
 for i in range(nb_seeds):
     for model in models:
@@ -48,7 +48,7 @@ for i in range(nb_seeds):
                 fh.writelines("export OMPI_MCA_btl_openib_warn_default_gid_prefix=0\n")
                 fh.writelines("export OMPI_MCA_mpi_warn_on_fork=0\n")
 
-                fh.writelines("srun python -u -B train.py --architecture {} --test-set-id {} --save-dir 'transfer_{}_{}/' 2>&1 ".format(model, id, model, id))
+                fh.writelines("srun python -u -B train.py --architecture {} --test-set-id {} --save-dir 'gloria_transfer_{}_{}/' 2>&1 ".format(model, id, model, id))
 
             os.system("sbatch %s" % job_file)
             sleep(1)
