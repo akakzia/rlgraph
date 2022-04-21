@@ -21,7 +21,8 @@ class RnCritic(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.mp_critic = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_critic_1 = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_critic_2 = GnnMessagePassing(dim_mp_output, dim_mp_output)
         self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.rho_critic = RhoCriticDeepSet(dim_rho_critic_input, dim_rho_critic_output)
 
@@ -76,7 +77,9 @@ class RnCritic(nn.Module):
         inp_mp = torch.stack([torch.cat([obs_body, act, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
                                          obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
 
-        output_mp = self.mp_critic(inp_mp)
+        output_mp_1 = self.mp_critic_1(inp_mp)
+
+        output_mp = self.mp_critic_2(output_mp_1)
 
         return output_mp
 
@@ -92,7 +95,8 @@ class RnActor(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.mp_actor = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_actor_1 = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_actor_2 = GnnMessagePassing(dim_mp_output, dim_mp_output)
         self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.rho_actor = RhoActorDeepSet(dim_rho_actor_input, dim_rho_actor_output)
 
@@ -113,7 +117,9 @@ class RnActor(nn.Module):
         inp_mp = torch.stack([torch.cat([obs_body, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
                                          obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
 
-        output_mp = self.mp_actor(inp_mp)
+        output_mp_1 = self.mp_actor_1(inp_mp)
+
+        output_mp = self.mp_actor_2(output_mp_1)
 
         return output_mp
 
