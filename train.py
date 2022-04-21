@@ -15,6 +15,8 @@ from utils import init_storage, get_eval_goals
 import time
 from mpi_utils import logger
 
+EVAL_FREQ = 5
+
 def get_env_params(env):
     obs = env.reset()
 
@@ -41,6 +43,9 @@ def launch(args):
         args.use_curriculum = False
     
     env = gym.make(args.env_name)
+
+    if args.test_set_id == 1:
+        args.multi_criteria_her == False
 
     # set random seeds for reproducibility
     env.seed(args.seed + MPI.COMM_WORLD.Get_rank())
@@ -143,7 +148,7 @@ def launch(args):
         time_dict['epoch'] += time.time() -t_init
         time_dict['total'] = time.time() - t_total_init
 
-        if args.evaluations:
+        if args.evaluations and epoch % EVAL_FREQ == 0:
             if rank==0: logger.info('\tRunning eval ..')
             # Performing evaluations
             t_i = time.time()
