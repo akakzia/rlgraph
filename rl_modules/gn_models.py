@@ -192,12 +192,12 @@ class GnSemantic:
         dim_mp_critic_output = 3 * dim_mp_actor_input
 
         dim_phi_actor_input = self.dim_body + (self.dim_object + dim_edge_features) + dim_mp_actor_output
-        dim_phi_actor_output = 2 * dim_phi_actor_input
+        dim_phi_actor_output = 3 * dim_phi_actor_input
         dim_rho_actor_input = dim_phi_actor_output
         dim_rho_actor_output = self.dim_act
 
         dim_phi_critic_input = self.dim_body + (self.dim_object + dim_edge_features) + dim_mp_critic_output + self.dim_act
-        dim_phi_critic_output = 2 * dim_phi_critic_input
+        dim_phi_critic_output = 3 * dim_phi_critic_input
         dim_rho_critic_input = dim_phi_critic_output
         dim_rho_critic_output = 1
 
