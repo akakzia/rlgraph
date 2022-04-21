@@ -37,13 +37,14 @@ class GnCritic(nn.Module):
 
         # Critic message passing using node features, edge features and global features (here body + action)
         # Returns, for each node, the attended vector of incoming edges
-        edge_features_attended = self.message_passing(obs, act, ag, g)
+        edge_features_attended = self.message_passing(obs, act, g)
 
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        inp = torch.stack([torch.cat([act, obs_body, obj, edge_features_attended[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
+        inp = torch.stack([torch.cat([act, obs_body, obj, g[:, self.predicate_ids[i]], edge_features_attended[i, :, :]], dim=1) 
+                          for i, obj in enumerate(obs_objects)])
 
         output_phi_critic_1, output_phi_critic_2 = self.phi_critic(inp)
         output_phi_critic_1 = output_phi_critic_1.permute(1, 0, 2)
@@ -57,18 +58,17 @@ class GnCritic(nn.Module):
         q1_pi_tensor, q2_pi_tensor = self.rho_critic(output_self_attention_1, output_self_attention_2)
         return q1_pi_tensor, q2_pi_tensor
 
-    def message_passing(self, obs, act, ag, g):
+    def message_passing(self, obs, act, g):
         batch_size = obs.shape[0]
-        assert batch_size == len(ag)
+        assert batch_size == len(g)
         
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        delta_g = g - ag
-
-        inp_mp = torch.stack([torch.cat([obs_body, act, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]][:, :3],
-                                         obs_objects[self.edges[i][1]][:, :3]], dim=-1) for i in range(self.n_permutations)])
+        inp_mp = torch.stack([torch.cat([obs_body, act, obs_objects[self.edges[i][0]][:, :3], g[:, self.predicate_ids[self.edges[i][0]]],
+                                         obs_objects[self.edges[i][1]][:, :3], g[:, self.predicate_ids[self.edges[i][1]]]], dim=-1) 
+                                         for i in range(self.n_permutations)])
 
         output_mp = self.mp_critic(inp_mp)
 
@@ -101,18 +101,17 @@ class GnActor(nn.Module):
         self.incoming_edges = incoming_edges
         self.predicate_ids = predicate_ids
     
-    def message_passing(self, obs, ag, g):
+    def message_passing(self, obs, g):
         batch_size = obs.shape[0]
-        assert batch_size == len(ag)
+        assert batch_size == len(g)
 
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        delta_g = g - ag
-
-        inp_mp = torch.stack([torch.cat([obs_body, delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]][:, :3],
-                                         obs_objects[self.edges[i][1]][:, :3]], dim=-1) for i in range(self.n_permutations)])
+        inp_mp = torch.stack([torch.cat([obs_body, obs_objects[self.edges[i][0]][:, :3], g[:, self.predicate_ids[self.edges[i][0]]], 
+                                         obs_objects[self.edges[i][1]][:, :3], g[:, self.predicate_ids[self.edges[i][1]]]], dim=-1)
+                                          for i in range(self.n_permutations)])
 
         output_mp = self.mp_actor(inp_mp)
 
@@ -129,13 +128,14 @@ class GnActor(nn.Module):
 
         # Actor message passing using node features, edge features and global features (here body)
         # Returns, for each node, the attended vector of incoming edges
-        edge_features_attended = self.message_passing(obs, ag, g)
+        edge_features_attended = self.message_passing(obs, g)
 
         obs_body = obs[:, :self.dim_body]
         obs_objects = [obs[:, self.dim_body + self.dim_object * i: self.dim_body + self.dim_object * (i + 1)]
                        for i in range(self.nb_objects)]
 
-        inp = torch.stack([torch.cat([obs_body, obj, edge_features_attended[i, :, :]], dim=1) for i, obj in enumerate(obs_objects)])
+        inp = torch.stack([torch.cat([obs_body, obj, g[:, self.predicate_ids[i]], edge_features_attended[i, :, :]], dim=1)
+                             for i, obj in enumerate(obs_objects)])
 
         output_phi_actor = self.phi_actor(inp)
         output_phi_actor = output_phi_actor.permute(1, 0, 2)
@@ -176,27 +176,27 @@ class GnSemantic:
 
         # Process indexes for graph construction
         self.edges, self.incoming_edges, _ = get_graph_structure(self.nb_objects)
-        goal_ids_per_object = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
-        perm = permutations(np.arange(self.nb_objects), 2)
-        self.predicate_ids = []
-        for p in perm:
-            # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
-            self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
+        self.predicate_ids = [np.arange(i * 3, (i + 1) * 3) for i in range(args.n_blocks)]
+        # perm = permutations(np.arange(self.nb_objects), 2)
+        # self.predicate_ids = []
+        # for p in perm:
+        #     # self.predicate_ids.append(np.concatenate([goal_ids_per_object[p[0]], goal_ids_per_object[p[1]]]))
+        #     self.predicate_ids.append(np.array(goal_ids_per_object[p[0]]))
 
         dim_edge_features = len(self.predicate_ids[0])
 
-        dim_mp_actor_input = 2 * 3 + dim_edge_features + self.dim_body # 2 * dim node + dim partial goal + dim global
+        dim_mp_actor_input = 2 * (3 + dim_edge_features) + self.dim_body # 2 * dim node + dim partial goal + dim global
         dim_mp_actor_output = 3 * dim_mp_actor_input
 
-        dim_mp_critic_input = 2 * 3 + dim_edge_features + (self.dim_body + self.dim_act) # 2 * dim node + dim partial goal + dim global
+        dim_mp_critic_input = 2 * (3 + dim_edge_features) + (self.dim_body + self.dim_act) # 2 * dim node + dim partial goal + dim global
         dim_mp_critic_output = 3 * dim_mp_actor_input
 
-        dim_phi_actor_input = self.dim_body + self.dim_object + dim_mp_actor_output
+        dim_phi_actor_input = self.dim_body + (self.dim_object + dim_edge_features) + dim_mp_actor_output
         dim_phi_actor_output = 2 * dim_phi_actor_input
         dim_rho_actor_input = dim_phi_actor_output
         dim_rho_actor_output = self.dim_act
 
-        dim_phi_critic_input = self.dim_body + self.dim_object + dim_mp_critic_output + self.dim_act
+        dim_phi_critic_input = self.dim_body + (self.dim_object + dim_edge_features) + dim_mp_critic_output + self.dim_act
         dim_phi_critic_output = 2 * dim_phi_critic_input
         dim_rho_critic_input = dim_phi_critic_output
         dim_rho_critic_output = 1
