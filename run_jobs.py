@@ -13,9 +13,9 @@ scratch = os.environ['SCRATCH']
 # Make top level directories
 mkdir_p(job_directory)
 
-nb_seeds = 1
+nb_seeds = 5
 models = ['full_gn', 'relation_network', 'deep_sets', 'interaction_network_2']
-test_ids = [1, 2, 3]
+test_ids = [2, 3]
 
 for i in range(nb_seeds):
     for model in models:
