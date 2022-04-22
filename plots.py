@@ -8,7 +8,7 @@ import pickle
 import math
 import json
 from scipy.stats import ttest_ind
-from utils import get_stat_func, generate_goals, generate_all_goals_in_goal_space, CompressPDF
+from utils import get_stat_func, CompressPDF
 
 font = {'size': 60}
 matplotlib.rc('font', **font)
@@ -20,34 +20,32 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098],  [0.466, 0.674, 0.188], [0.9
           [0.494, 0.1844, 0.556],[0.3010, 0.745, 0.933], [137/255,145/255,145/255],
           [0.466, 0.674, 0.8], [0.929, 0.04, 0.125],
           [0.3010, 0.245, 0.33], [0.635, 0.078, 0.184], [0.35, 0.78, 0.504]]
+cmap = plt.get_cmap('tab20b')
+colors = np.array(cmap.colors)[[0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16, 17, 18]]
+folder = 'rebuttal_results_semantic'
 
-# [[0, 0.447, 0.7410], [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],  # c2[0.85, 0.325, 0.098],[0.85, 0.325, 0.098],
-#  [0.494, 0.1844, 0.556], [209 / 255, 70 / 255, 70 / 255], [137 / 255, 145 / 255, 145 / 255],  # [0.3010, 0.745, 0.933],
-#  [0.466, 0.674, 0.188], [0.929, 0.694, 0.125],
-#  [0.3010, 0.745, 0.933], [0.635, 0.078, 0.184]]
+RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/' + folder + '/'
+SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
+TO_PLOT = ['semantic_goals']
 
-RESULTS_PATH = '/home/akakzia/DECSTR/models/'
-SAVE_PATH = '/home/akakzia/DECSTR/plots/'
-TO_PLOT = ['Partial']#'Architecture', 'Rewards', 'Masks', 'Partial']
-
-NB_CLASSES = 6 # 12 for 5 blocks
+NB_CLASSES = 11 # 12 for 5 blocks
 
 LINE = 'mean'
 ERR = 'std'
 DPI = 30
 N_SEEDS = None
 N_EPOCHS = None
-LINEWIDTH = 10
-MARKERSIZE = 30
+LINEWIDTH = 8 # 8 for per class
+MARKERSIZE = 15 # 15 for per class
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 'v', 's', 'P', 'D', 'X', "*", 'v', 's', 'p', 'P', '1']
-FREQ = 20
-NB_BUCKETS = 5
+FREQ = 10
+NB_BUCKETS = 10
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-LAST_EP = 300
-LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 30
+LAST_EP = 160
+LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 5
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 COMPRESSOR = CompressPDF(4)
 # 0: '/default',
@@ -58,13 +56,13 @@ COMPRESSOR = CompressPDF(4)
 
 
 def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
-    fig = plt.figure(figsize=(22, 15), frameon=False)
+    fig = plt.figure(figsize=(37, 20), frameon=False) # 34 18 for semantic
     ax = fig.add_subplot(111)
     ax.spines['top'].set_linewidth(6)
     ax.spines['right'].set_linewidth(6)
     ax.spines['bottom'].set_linewidth(6)
     ax.spines['left'].set_linewidth(6)
-    ax.tick_params(width=10, direction='in', length=20, labelsize='55')
+    ax.tick_params(width=10, direction='in', length=20, labelsize='40')
     artists = ()
     if xlabel:
         xlab = plt.xlabel(xlabel)
@@ -78,8 +76,11 @@ def setup_figure(xlabel=None, ylabel=None, xlim=None, ylim=None):
         plt.xlim(xlim)
     return artists, ax
 
-def setup_n_figs(n, xlabels=None, ylabels=None, xlims=None, ylims=None):
-    fig, axs = plt.subplots(n, 1, figsize=(22, 15), frameon=False)
+def setup_n_figs(n, m, xlabels=None, ylabels=None, xlims=None, ylims=None):
+    if n == 1:
+        fig, axs = plt.subplots(n, m, figsize=(48, 12), frameon=False)
+    else:
+        fig, axs = plt.subplots(n, m, figsize=(m * 18, n * 12), frameon=False)
     axs = axs.ravel()
     artists = ()
     for i_ax, ax in enumerate(axs):
@@ -98,7 +99,7 @@ def setup_n_figs(n, xlabels=None, ylabels=None, xlims=None, ylims=None):
             ax.set_ylim(ylims[i_ax])
         if xlims[i_ax]:
             ax.set_xlim(xlims[i_ax])
-    return artists, axs
+    return fig, artists, axs
 
 def save_fig(path, artists):
     plt.savefig(os.path.join(path), bbox_extra_artists=artists, bbox_inches='tight', dpi=DPI)
@@ -139,151 +140,7 @@ def check_length_and_seeds(experiment_path):
                 pass
     return max_len, max_seeds, min_len, min_seeds
 
-
-def plot_c_lp_p_sr(experiment_path, true_buckets=True):
-    conditions = os.listdir(experiment_path)
-    for cond in conditions:
-        cond_path = experiment_path + cond + '/'
-        list_runs = sorted(os.listdir(cond_path))
-        for run in list_runs:
-            print(run)
-            # try:
-            run_path = cond_path + run + '/'
-            data_run = pd.read_csv(run_path + 'progress.csv')
-            x_eps = np.arange(0, len(data_run) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
-            # x_eps = np.arange(0, len(data_run), FREQ)
-            x = np.arange(0, LAST_EP + 1, FREQ)
-            artists, axs = setup_n_figs(n=3,
-                                        # xlabels=['Epochs', None, None],
-                                        xlabels=[None, None, 'Episodes (x$10^3$)', ],
-                                        ylabels=['C', 'LP', 'P'],
-                                        xlims=[(0, LIM)] * 3,
-                                        ylims=[(-0.1,1.01),  None, (0, 1)])
-            # if true_buckets:
-            #     buckets = generate_goals(nb_objects=3, sym=1, asym=1)
-            #     all_goals = generate_all_goals_in_goal_space().astype(np.float32)
-            #     valid_goals = []
-            #     for k in buckets.keys():
-            #         valid_goals += buckets[k]
-            #     valid_goals = np.array(valid_goals)
-            #     all_goals = np.array(all_goals)
-            #     num_goals = all_goals.shape[0]
-            #     all_goals_str = [str(g) for g in all_goals]
-            #     # initialize dict to convert from the oracle id to goals and vice versa.
-            #     # oracle id is position in the all_goal array
-            #     g_str_to_oracle_id = dict(zip(all_goals_str, range(num_goals)))
-            #     valid_goals_oracle_ids = np.array([g_str_to_oracle_id[str(vg)] for vg in valid_goals])
-            #
-            #     bucket_ids = dict()
-            #     for k in buckets.keys():
-            #         bucket_ids[k] = np.array([g_str_to_oracle_id[str(np.array(g))] for g in buckets[k]])
-            #         id_in_valid = [int(np.argwhere(valid_goals_oracle_ids == i).flatten()) for i in bucket_ids[k]]
-            #         sr = np.mean([data_run['Eval_SR_{}'.format(i)] for i in id_in_valid], axis=0)
-            #         axs[0].plot(x_eps, sr[x], color=colors[k], marker=MARKERS[k], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-            #
-            # else:
-            #     T = len(data_run['Eval_SR_1'])
-            #     SR = np.zeros([NB_BUCKETS, T])
-            #     for t in range(T):
-            #         for i in range(NB_BUCKETS):
-            #             ids = []
-            #             for g_id in range(35):
-            #                 if data_run['{}_in_bucket'.format(g_id)][t] == i:
-            #                     ids.append(g_id)
-            #             values = [data_run['Eval_SR_{}'.format(g_id)][t] for g_id in ids]
-            #             SR[i, t] = np.mean(values)
-            #
-            #     for i in range(SR.shape[0]):
-            #         axs[0].plot(x_eps, SR[i][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-            #     axs[0].plot(x_eps, np.mean(SR, axis=0)[x], color='k', linestyle='--', marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//2)
-
-            counter = 0
-            for i in range(NB_BUCKETS):
-                if 'B_0_C' in data_run.keys():
-                    axs[0].plot(x_eps, data_run['B_{}_C'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-                    axs[1].plot(x_eps, data_run['B_{}_LP'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-                    axs[2].plot(x_eps, data_run['B_{}_p'.format(i)][x], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-                # try:
-                #     p = np.array([data_run['#Rew_{}'.format(i)] for i in range(counter, counter + len(buckets[i]))])
-                #     counter += len(buckets[i])
-                #     axs[1].plot(x_eps, np.mean(p, axis=0)[x],  color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE//3, linewidth=LINEWIDTH//3)
-                # except:
-                #     pas
-            for i in range(3):
-                if i != 1:
-                    axs[i].set_yticks([0, 0.5, 1])
-                elif i == 1:
-                    axs[i].set_yticks([0, 0.05, 0.1])
-                if i < 2:
-                    axs[i].set_xticklabels([])
-
-            leg = axs[0].legend(['B{}'.format(i) for i in range(1, 6)],
-                             loc='upper center',
-                             bbox_to_anchor=(0.5, 1.4),
-                             ncol=5,
-                             fancybox=True,
-                             shadow=True,
-                             prop={'size': 45, 'weight': 'bold'},
-                             markerscale=1)
-            artists += (leg,)
-            save_fig(path=run_path + 'SR_LP_C_P.pdf', artists=artists)
-            try:
-                artists, axs = setup_figure(xlabel='Epochs',
-                                            ylabel=['p'])
-                # axs.plot
-                p = np.array([data_run['#proba_{}'.format(i)] for i in range(NB_VALID_GOALS)])
-                axs.plot(p.transpose(), linewidth=LINEWIDTH)
-                save_fig(path=run_path + 'probas.pdf', artists=artists)
-            except:
-                pass
-            # except:
-            #     print('failed')
-
-def plot_lp_av(max_len, experiment_path, folder, true_buckets=True):
-
-    condition_path = experiment_path + folder + '/'
-    list_runs = sorted(os.listdir(condition_path))
-    lp_data = np.zeros([len(list_runs), 5, max_len])
-    lp_data.fill(np.nan)
-    x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
-    # x_eps = np.arange(0, max_len, FREQ)
-    x = np.arange(0, (LAST_EP + 1), FREQ)
-    for i_run, run in enumerate(list_runs):
-        run_path = condition_path + run + '/'
-        data_run = pd.read_csv(run_path + 'progress.csv')
-
-        lp_buckets =  []
-        for i in range(NB_BUCKETS):
-            lp_buckets.append(data_run['B_{}_LP'.format(i)][:LAST_EP + 1])
-        lp_buckets = np.array(lp_buckets)
-        lp_data[i_run, :, :lp_buckets.shape[1]] = lp_buckets.copy()
-
-    artists, ax = setup_figure(  # xlabel='Episodes (x$10^3$)',
-        xlabel='Episodes (x$10^3$)',
-        ylabel='Success Rate',
-        xlim=[-1, LIM],
-        ylim=None)
-    lp_per_cond_stats = np.zeros([NB_BUCKETS, max_len, 3])
-    lp_per_cond_stats[:, :, 0] = line(lp_data)
-    lp_per_cond_stats[:, :, 1] = err_min(lp_data)
-    lp_per_cond_stats[:, :, 2] = err_plus(lp_data)
-    for i in range(5):
-        plt.plot(x_eps, lp_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-        plt.fill_between(x_eps, lp_per_cond_stats[i, x, 1], lp_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
-
-    leg = plt.legend(['Bucket {}'.format(i) for i in range(5)],
-                     loc='upper center',
-                     bbox_to_anchor=(0.5, 1.15),
-                     ncol=3,
-                     fancybox=True,
-                     shadow=True,
-                     prop={'size': 40, 'weight': 'bold'},
-                     markerscale=1)
-    artists += (leg,)
-    # ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    save_fig(path=SAVE_PATH + PLOT + '_lp.pdf', artists=artists)
-
-def plot_sr_av(max_len, experiment_path, folder, true_buckets=False):
+def plot_sr_av(max_len, experiment_path, folder):
 
     condition_path = experiment_path + folder + '/'
     list_runs = sorted(os.listdir(condition_path))
@@ -298,52 +155,6 @@ def plot_sr_av(max_len, experiment_path, folder, true_buckets=False):
         run_path = condition_path + run + '/'
         data_run = pd.read_csv(run_path + 'progress.csv')
 
-
-        # if true_buckets:
-        #     buckets = generate_goals(nb_objects=3, sym=1, asym=1)
-        #     all_goals = generate_all_goals_in_goal_space().astype(np.float32)
-        #     valid_goals = []
-        #     for k in buckets.keys():
-        #         valid_goals += buckets[k]
-        #     valid_goals = np.array(valid_goals)
-        #     all_goals = np.array(all_goals)
-        #     num_goals = all_goals.shape[0]
-        #     all_goals_str = [str(g) for g in all_goals]
-        #     # initialize dict to convert from the oracle id to goals and vice versa.
-        #     # oracle id is position in the all_goal array
-        #     g_str_to_oracle_id = dict(zip(all_goals_str, range(num_goals)))
-        #     valid_goals_oracle_ids = np.array([g_str_to_oracle_id[str(vg)] for vg in valid_goals])
-        #
-        #     bucket_ids = dict()
-        #     sr_buckets = []
-        #     all_sr = np.mean([data_run['Eval_SR_{}'.format(i)][:LAST_EP + 1] for i in range(35)], axis=0)
-        #     for k in buckets.keys():
-        #         bucket_ids[k] = np.array([g_str_to_oracle_id[str(np.array(g))] for g in buckets[k]])
-        #         id_in_valid = [int(np.argwhere(valid_goals_oracle_ids == i).flatten()) for i in bucket_ids[k]]
-        #         sr = np.mean([data_run['Eval_SR_{}'.format(i)][:LAST_EP + 1] for i in id_in_valid], axis=0)
-        #         sr_buckets.append(sr)
-        #     sr_buckets = np.array(sr_buckets)
-        #     sr_data[i_run, :, :sr_buckets.shape[1]] = sr_buckets.copy()
-        #     global_sr[i_run, :all_sr.size] = all_sr.copy()
-        # else:
-        #     T = len(data_run['Eval_SR_1'][:LAST_EP + 1])
-        #     SR = np.zeros([NB_BUCKETS, T])
-        #     for t in range(T):
-        #         for i in range(NB_BUCKETS):
-        #             ids = []
-        #             for g_id in range(35):
-        #                 if data_run['{}_in_bucket'.format(g_id)][t] == i:
-        #                     ids.append(g_id)
-        #             values = [data_run['Eval_SR_{}'.format(g_id)][t] for g_id in ids]
-        #             SR[i, t] = np.mean(values)
-        #     all_sr = np.mean([data_run['Eval_SR_{}'.format(i)] for i in range(35)], axis=0)
-        #
-        #     sr_buckets =  []
-        #     for i in range(SR.shape[0]):
-        #         sr_buckets.append(SR[i])
-        #     sr_buckets = np.array(sr_buckets)
-        #     sr_data[i_run, :, :sr_buckets.shape[1]] = sr_buckets.copy()
-        #     global_sr[i_run, :all_sr.size] = all_sr.copy()
         T = len(data_run['Eval_SR_1'][:LAST_EP + 1])
         SR = np.zeros([NB_CLASSES, T])
         for t in range(T):
@@ -370,20 +181,93 @@ def plot_sr_av(max_len, experiment_path, folder, true_buckets=False):
     av = line(global_sr)
     for i in range(NB_CLASSES):
         plt.plot(x_eps, sr_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-        plt.fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
     plt.plot(x_eps, av[x], color=[0.3]*3, linestyle='--', linewidth=LINEWIDTH // 2)
     leg = plt.legend(['Class {}'.format(i+1) for i in range(NB_CLASSES)] + ['Global'],
                      loc='upper center',
-                     bbox_to_anchor=(0.5, 1.45),
-                     ncol=4,
+                     bbox_to_anchor=(0.5, 1.15),
+                     ncol=6,
                      fancybox=True,
                      shadow=True,
-                     prop={'size': 45, 'weight': 'bold'},
+                     prop={'size': 30, 'weight': 'bold'},
                      markerscale=1)
     artists += (leg,)
-    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    save_fig(path=SAVE_PATH + PLOT + '_sr.pdf', artists=artists)
 
+    for i in range(NB_CLASSES):
+        plt.fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
+
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    plt.grid()
+    # ax.set_facecolor((244/255, 244/255, 244/255))
+    save_fig(path=SAVE_PATH + folder + '_sr.pdf', artists=artists)
+
+
+def plot_sr_av_all(max_len, experiment_path):
+    fig, artists, ax = setup_n_figs(n=2,
+                                   m=2, 
+                                   xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
+                                   ylabels= ['Success Rate', None] * 2,
+                                #    xlabels = ['Episodes (x$10^3$)'] * 3,
+                                #    ylabels = ['Success Rate', None, None],
+                                   xlims = [[-1, LIM] for _ in range(4)],
+                                   ylims= [[-0.02, 1.03] for _ in range(4)]
+        )
+    # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
+    titles = ['S-GN', 'S-IN', 'S-RN', 'S-DS']
+    for k, folder in enumerate(['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets']):
+        condition_path = experiment_path + folder + '/'
+        list_runs = sorted(os.listdir(condition_path))
+        global_sr = np.zeros([len(list_runs), max_len])
+        global_sr.fill(np.nan)
+        sr_data = np.zeros([len(list_runs), NB_CLASSES, max_len])
+        sr_data.fill(np.nan)
+        x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
+        # x_eps = np.arange(0, max_len, FREQ)
+        x = np.arange(0, LAST_EP + 1, FREQ)
+        for i_run, run in enumerate(list_runs):
+            run_path = condition_path + run + '/'
+            data_run = pd.read_csv(run_path + 'progress.csv')
+
+            T = len(data_run['Eval_SR_1'][:LAST_EP + 1])
+            SR = np.zeros([NB_CLASSES, T])
+            for t in range(T):
+                for i in range(NB_CLASSES):
+                    SR[i, t] = data_run['Eval_SR_{}'.format(i+1)][t]
+            all_sr = np.mean([data_run['Eval_SR_{}'.format(i+1)] for i in range(NB_CLASSES)], axis=0)
+
+            sr_buckets = []
+            for i in range(SR.shape[0]):
+                sr_buckets.append(SR[i])
+            sr_buckets = np.array(sr_buckets)
+            sr_data[i_run, :, :sr_buckets.shape[1]] = sr_buckets.copy()
+            global_sr[i_run, :all_sr.size] = all_sr.copy()
+        
+        sr_per_cond_stats = np.zeros([NB_CLASSES, max_len, 3])
+        sr_per_cond_stats[:, :, 0] = line(sr_data)
+        sr_per_cond_stats[:, :, 1] = err_min(sr_data)
+        sr_per_cond_stats[:, :, 2] = err_plus(sr_data)
+        av = line(global_sr)
+        for i in range(NB_CLASSES):
+            ax[k].plot(x_eps, sr_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
+        ax[k].plot(x_eps, av[x], color=[0.3]*3, linestyle='--', linewidth=LINEWIDTH // 2)
+
+        for i in range(NB_CLASSES):
+            ax[k].fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
+
+        ax[k].set_yticks([0, 0.25, 0.5, 0.75, 1])
+        ax[k].grid()
+        ax[k].set_title(titles[k], fontname='monospace', fontweight='bold')
+        ax[k].set_facecolor('whitesmoke')
+    leg = fig.legend(['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$', '$S_4$', '$S_5$', 'Global'],
+                    # ['No Stacks', '$\widetilde{S}_2$', '$\widetilde{S}_3$', '$\widetilde{S}_4$', '$\widetilde{S}_5$', 'Global'],
+                    loc='upper center',
+                    bbox_to_anchor=(0.525, 1.15),
+                    ncol=6,
+                    fancybox=True,
+                    shadow=True,
+                    prop={'size': 65, 'weight': 'normal'},
+                    markerscale=1)
+    artists += (leg,)
+    save_fig(path=SAVE_PATH + 'per_class.pdf', artists=artists)
 
 
 def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=None, ref='with_init'):
@@ -411,53 +295,56 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
 
     x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) / 1000
     x = np.arange(0, LAST_EP + 1, FREQ)
-    if 'ablation' in experiment_path:
-        sr[2, 3, 600] = 0.17
-    # compute p value wrt ref id
-    p_vals = dict()
-    for i_cond in range(len(conditions)):
-        if i_cond != ref_id:
-            p_vals[i_cond] = []
-            for i in x:
-                ref_inds = np.argwhere(~np.isnan(sr[:, ref_id, i])).flatten()
-                other_inds = np.argwhere(~np.isnan(sr[:, i_cond, i])).flatten()
-                if ref_inds.size > 1 and other_inds.size > 1:
-                    ref = sr[:, ref_id, i][ref_inds]
-                    other = sr[:, i_cond, i][other_inds]
-                    p_vals[i_cond].append(ttest_ind(ref, other, equal_var=False)[1])
-                else:
-                    p_vals[i_cond].append(1)
-
     artists, ax = setup_figure(xlabel='Episodes (x$10^3$)',
                                # xlabel='Epochs',
                                ylabel='Success Rate',
                                xlim=[-1, LIM],
-                               ylim=[-0.02, 1 -0.02 + 0.05 * (len(conditions) + 1)])
+                               ylim=[-0.02, 1 + 0.02])
 
     for i in range(len(conditions)):
         plt.plot(x_eps, sr_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
-        plt.fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
 
-    for i_cond in range(len(conditions)):
-        if i_cond != ref_id:
-            inds_sign = np.argwhere(np.array(p_vals[i_cond]) < ALPHA_TEST).flatten()
-            if inds_sign.size > 0:
-                plt.scatter(x=x_eps[inds_sign], y=np.ones([inds_sign.size]) - 0.04 + 0.05 * i_cond, marker='*', color=colors[i_cond], s=1300)
     if labels is None:
         labels = conditions
     leg = plt.legend(labels,
                      loc='upper center',
                      bbox_to_anchor=(0.5, 1.15),
-                     ncol=2 if len(conditions) == 4 else 3,
+                     ncol=5,
                      fancybox=True,
                      shadow=True,
-                     prop={'size': 50, 'weight': 'bold'},
+                     prop={'size': 70, 'weight': 'bold'},
                      markerscale=1,
                      )
     for l in leg.get_lines():
         l.set_linewidth(7.0)
     artists += (leg,)
+    for i in range(len(conditions)):
+        plt.fill_between(x_eps, sr_per_cond_stats[i, x, 1], sr_per_cond_stats[i, x, 2], color=colors[i], alpha=ALPHA)
+    
+    # # compute p value wrt ref id
+    # p_vals = dict()
+    # for i_cond in range(len(conditions)):
+    #     if i_cond != ref_id:
+    #         p_vals[i_cond] = []
+    #         for i in x:
+    #             ref_inds = np.argwhere(~np.isnan(sr[:, ref_id, i])).flatten()
+    #             other_inds = np.argwhere(~np.isnan(sr[:, i_cond, i])).flatten()
+    #             if ref_inds.size > 1 and other_inds.size > 1:
+    #                 ref = sr[:, ref_id, i][ref_inds]
+    #                 other = sr[:, i_cond, i][other_inds]
+    #                 p_vals[i_cond].append(ttest_ind(ref, other, equal_var=False)[1])
+    #             else:
+    #                 p_vals[i_cond].append(1)
+                    
+    # for i_cond in range(len(conditions)):
+    #     if i_cond != ref_id:
+    #         inds_sign = np.argwhere(np.array(p_vals[i_cond]) < ALPHA_TEST).flatten()
+    #         if inds_sign.size > 0:
+    #             plt.scatter(x=x_eps[inds_sign], y=np.ones([inds_sign.size]) - 0.04 + 0.05 * i_cond, marker='*', color=colors[i_cond], s=1300)
+
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    plt.grid()
+    # ax.set_facecolor((244/255, 244/255, 244/255))
     save_fig(path=SAVE_PATH + PLOT + '.pdf', artists=artists)
     return sr_per_cond_stats.copy()
 
@@ -465,16 +352,17 @@ if __name__ == '__main__':
 
     for PLOT in TO_PLOT:
         print('\n\tPlotting', PLOT)
-        # if PLOT == 'init_study':
-        experiment_path = RESULTS_PATH + PLOT + '/'
-
-        # plot c, lp , p and sr for each run
-        # plot_c_lp_p_sr(experiment_path)
+        experiment_path = RESULTS_PATH
 
         max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
-        # plot_c_lp_p_sr(experiment_path)
 
-        plot_sr_av(max_len, experiment_path, 'GANGSTR')
+        # conditions = ['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets', 'flat']
+        # labels = ['S-GN', 'S-IN', 'S-RN', 'S-DS', 'S-Flat']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
+        # plot_sr_av(max_len, experiment_path, 'flat')
+        # plot_sr_av_all(max_len, experiment_path)
+
+
         # if PLOT == 'Architecture':
         #     conditions = ['GANGSTR', 'Interaction Graph']
         #     labels = ['GANGSTR', 'Interaction Graph']
@@ -582,6 +470,3 @@ if __name__ == '__main__':
         #                      prop={'size': 35, 'weight': 'bold'},
         #                      markerscale=1)
         #     save_fig(path=SAVE_PATH + PLOT + '_coverage.pdf', artists=artists)
-
-
-
