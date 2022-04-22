@@ -13,7 +13,7 @@ scratch = os.environ['SCRATCH']
 # Make top level directories
 mkdir_p(job_directory)
 
-nb_seeds = 1
+nb_seeds = 4
 models = ['relation_network', 'deep_sets']
 
 for i in range(nb_seeds):
