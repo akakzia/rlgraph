@@ -21,7 +21,8 @@ class GnCritic(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.mp_critic = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_critic_1 = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_critic_2 = GnnMessagePassing(dim_mp_output, dim_mp_output)
         self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.phi_critic = PhiCriticDeepSet(dim_phi_critic_input, 256, dim_phi_critic_output)
         self.node_self_attention = SelfAttention(dim_phi_critic_output, 1)  # test 1 attention heads
@@ -69,7 +70,8 @@ class GnCritic(nn.Module):
         inp_mp = torch.stack([torch.cat([delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
                                          obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
 
-        output_mp = self.mp_critic(inp_mp)
+        output_mp_1 = self.mp_critic_1(inp_mp)
+        output_mp = self.mp_critic_2(output_mp_1)
 
         # Apply self attention on edge features for each node based on the incoming edges
         output_mp = output_mp.permute(1, 0, 2)
@@ -90,7 +92,8 @@ class GnActor(nn.Module):
 
         self.n_permutations = self.nb_objects * (self.nb_objects - 1)
 
-        self.mp_actor = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_actor_1 = GnnMessagePassing(dim_mp_input, dim_mp_output)
+        self.mp_actor_2 = GnnMessagePassing(dim_mp_output, dim_mp_output)
         self.edge_self_attention = SelfAttention(dim_mp_output, 1)
         self.phi_actor = PhiActorDeepSet(dim_phi_actor_input, 256, dim_phi_actor_output)
         self.self_attention = SelfAttention(dim_phi_actor_output, 1) # test 1 attention heads
@@ -112,7 +115,8 @@ class GnActor(nn.Module):
         inp_mp = torch.stack([torch.cat([delta_g[:, self.predicate_ids[i]], obs_objects[self.edges[i][0]],
                                          obs_objects[self.edges[i][1]]], dim=-1) for i in range(self.n_permutations)])
 
-        output_mp = self.mp_actor(inp_mp)
+        output_mp_1 = self.mp_actor_1(inp_mp)
+        output_mp = self.mp_actor_2(output_mp_1)
 
         # Apply self attention on edge features for each node based on the incoming edges
         output_mp = output_mp.permute(1, 0, 2)
