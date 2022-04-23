@@ -33,11 +33,16 @@ TO_PLOT = ['transfer_study']
 TEST_SET = 2
 
 # TEST_CLASSES = [5, 7, 8, 9] if TEST_SET == 2 else [6, 7, 9]
-if TEST_SET == 2:
+if TEST_SET == 1:
+    TEST_ID = 2
+    TEST_CLASSES = [8, 9]
+elif TEST_SET == 2:
+    TEST_ID = 3
+    TEST_CLASSES = [6, 7, 9]
+elif TEST_SET == 3:
+    TEST_ID = 2
     TEST_CLASSES = [5, 7]
-else:
-    raise NotImplementedError
-TRAIN_CLASSES = [1, 2, 3, 4, 6] if TEST_SET == 2 else [1, 2, 3, 4, 5, 8]
+# TRAIN_CLASSES = [1, 2, 3, 4, 6] if TEST_SET == 2 else [1, 2, 3, 4, 5, 8]
 
 NB_CLASSES = 11 # 12 for 5 blocks
 
@@ -51,11 +56,11 @@ MARKERSIZE = 15 # 15 for per class
 ALPHA = 0.3
 ALPHA_TEST = 0.05
 MARKERS = ['o', 'v', 's', 'P', 'D', 'X', "*", 'v', 's', 'p', 'P', '1']
-FREQ = 1
+FREQ = 2
 NB_BUCKETS = 10
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-LAST_EP = 200
+LAST_EP = 180
 LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 5
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 COMPRESSOR = CompressPDF(4)
@@ -300,7 +305,12 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
     sr_per_cond_stats[:, :, 1] = err_min(sr)
     sr_per_cond_stats[:, :, 2] = err_plus(sr)
 
-
+    for i, l in enumerate(['GN', 'IN', 'RN']):
+        idx = min(LAST_EP // 5, np.argwhere(np.isnan(line(sr)[i]))[0] - 1)
+        last_value = line(sr)[i][idx]
+        last_er_m = last_value - err_min(sr)[i][idx]
+        last_er_p = err_plus(sr)[i][idx] - last_value
+        print(f'{l}: {last_value} +- {last_er_m} or {last_er_p}')
     x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) * 5 / 1000
     x = np.arange(0, LAST_EP + 1, FREQ)
     artists, ax = setup_figure(xlabel='Episodes (x$10^3$)',
@@ -368,16 +378,16 @@ def transfer_get_mean_sr(max_len, experiment_path):
         )
     # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
     titles = [f'C-{s}' for s in ['GN', 'IN', 'RN']]
-    files = [f'gloria_transfer_{s}_{TEST_SET}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
+    files = [f'gloria_transfer_{s}_{TEST_ID}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
     for k, folder in enumerate(files):
         condition_path = experiment_path + folder + '/'
         list_runs = sorted(os.listdir(condition_path))
-        global_sr_train = np.zeros([len(list_runs), LAST_EP + 1])
-        global_sr_train.fill(np.nan)
+        # global_sr_train = np.zeros([len(list_runs), LAST_EP + 1])
+        # global_sr_train.fill(np.nan)
         global_sr_test = np.zeros([len(list_runs), LAST_EP + 1])
         global_sr_test.fill(np.nan)
-        sr_data_train = np.zeros([len(list_runs), len(TRAIN_CLASSES), LAST_EP + 1])
-        sr_data_train.fill(np.nan)
+        # sr_data_train = np.zeros([len(list_runs), len(TRAIN_CLASSES), LAST_EP + 1])
+        # sr_data_train.fill(np.nan)
         sr_data_test = np.zeros([len(list_runs), len(TEST_CLASSES), LAST_EP + 1])
         sr_data_test.fill(np.nan)
         x_eps = np.arange(0, (LAST_EP + 1) * NB_EPS_PER_EPOCH, NB_EPS_PER_EPOCH * FREQ) * 5 / 1000
@@ -388,22 +398,22 @@ def transfer_get_mean_sr(max_len, experiment_path):
             data_run = pd.read_csv(run_path + 'progress.csv')
 
             T = len(data_run['Eval_SR_1'][:LAST_EP + 1])
-            SR_TRAIN = np.zeros([len(TRAIN_CLASSES), T])
+            # SR_TRAIN = np.zeros([len(TRAIN_CLASSES), T])
             SR_TEST = np.zeros([len(TEST_CLASSES), T])
             for t in range(T):
-                for i, c in enumerate(TRAIN_CLASSES):
-                    SR_TRAIN[i, t] = data_run['Eval_SR_{}'.format(c)][t]
+                # for i, c in enumerate(TRAIN_CLASSES):
+                #     SR_TRAIN[i, t] = data_run['Eval_SR_{}'.format(c)][t]
                 for i, c in enumerate(TEST_CLASSES):
                     SR_TEST[i, t] = data_run['Eval_SR_{}'.format(c)][t]
-            all_sr_train = np.mean([data_run['Eval_SR_{}'.format(c)] for c in TRAIN_CLASSES], axis=0)
+            # all_sr_train = np.mean([data_run['Eval_SR_{}'.format(c)] for c in TRAIN_CLASSES], axis=0)
             all_sr_test = np.mean([data_run['Eval_SR_{}'.format(c)] for c in TEST_CLASSES], axis=0)
 
-            sr_classes_train = []
-            for i in range(SR_TRAIN.shape[0]):
-                sr_classes_train.append(SR_TRAIN[i])
-            sr_classes_train = np.array(sr_classes_train)
-            sr_data_train[i_run, :, :sr_classes_train.shape[1]] = sr_classes_train.copy()
-            global_sr_train[i_run, :all_sr_train.size] = all_sr_train.copy()
+            # sr_classes_train = []
+            # for i in range(SR_TRAIN.shape[0]):
+            #     sr_classes_train.append(SR_TRAIN[i])
+            # sr_classes_train = np.array(sr_classes_train)
+            # sr_data_train[i_run, :, :sr_classes_train.shape[1]] = sr_classes_train.copy()
+            # global_sr_train[i_run, :all_sr_train.size] = all_sr_train.copy()
 
             sr_classes_test = []
             for i in range(SR_TEST.shape[0]):
@@ -412,11 +422,11 @@ def transfer_get_mean_sr(max_len, experiment_path):
             sr_data_test[i_run, :, :sr_classes_test.shape[1]] = sr_classes_test.copy()
             global_sr_test[i_run, :all_sr_test.size] = all_sr_test.copy()
         
-        train_sr_per_cond_stats = np.zeros([len(TRAIN_CLASSES), LAST_EP + 1, 3])
-        train_sr_per_cond_stats[:, :, 0] = line(sr_data_train)
-        train_sr_per_cond_stats[:, :, 1] = err_min(sr_data_train)
-        train_sr_per_cond_stats[:, :, 2] = err_plus(sr_data_train)
-        train_av = line(global_sr_train)
+        # train_sr_per_cond_stats = np.zeros([len(TRAIN_CLASSES), LAST_EP + 1, 3])
+        # train_sr_per_cond_stats[:, :, 0] = line(sr_data_train)
+        # train_sr_per_cond_stats[:, :, 1] = err_min(sr_data_train)
+        # train_sr_per_cond_stats[:, :, 2] = err_plus(sr_data_train)
+        # train_av = line(global_sr_train)
 
         test_sr_per_cond_stats = np.zeros([len(TEST_CLASSES), LAST_EP + 1, 3])
         test_sr_per_cond_stats[:, :, 0] = line(sr_data_test)
@@ -427,7 +437,13 @@ def transfer_get_mean_sr(max_len, experiment_path):
         CLASSES = TEST_CLASSES
         sr_per_cond_stats = test_sr_per_cond_stats
         av = test_av 
+        print(f'Evaluating {folder}')
         for i in range(len(CLASSES)):
+            idx = min(LAST_EP // 5, np.argwhere(np.isnan(line(sr_data_test)[i]))[0] - 1)
+            last_value = line(sr_data_test)[i][idx]
+            last_er_m = last_value - err_min(sr_data_test)[i][idx]
+            last_er_p = err_plus(sr_data_test)[i][idx] - last_value
+            print(f'Class {TEST_CLASSES[i]}: {last_value} +- {last_er_m} or {last_er_p}')
             ax[k].plot(x_eps, sr_per_cond_stats[i, x, 0], color=colors[i], marker=MARKERS[i], markersize=MARKERSIZE, linewidth=LINEWIDTH)
         ax[k].plot(x_eps, av[x], color=[0.3]*3, linestyle='--', linewidth=LINEWIDTH)
 
@@ -437,14 +453,13 @@ def transfer_get_mean_sr(max_len, experiment_path):
         ax[k].set_yticks([0, 0.25, 0.5, 0.75, 1])
         ax[k].grid()
         ax[k].set_title(titles[k], fontname='monospace', fontweight='bold')
+    if TEST_SET == 1:
+        test_labels = [ '$P_3$', '$P_3$ & $S_2$']
     if TEST_SET == 2:
-        train_labels = ['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_2$ & $S_2$']
-        test_labels = ['$S_3$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$']
-    elif TEST_SET == 3:
-        train_labels = ['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$P_3$']
         test_labels = ['$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$ & $S_2$']
-    labels = test_labels
-    leg = fig.legend(labels + ['Global'],
+    elif TEST_SET == 3:
+        test_labels = ['$S_3$', '$S_2$ & $S_3$']
+    leg = fig.legend(test_labels + ['Global'],
                     loc='upper center',
                     bbox_to_anchor=(0.525, 1.22),
                     ncol=7,
@@ -453,7 +468,7 @@ def transfer_get_mean_sr(max_len, experiment_path):
                     prop={'size': 65, 'weight': 'normal'},
                     markerscale=1)
     artists += (leg,)
-    save_fig(path=SAVE_PATH + 'per_class.pdf', artists=artists)
+    save_fig(path=SAVE_PATH + f'per_class_{TEST_SET}.pdf', artists=artists)
 
 if __name__ == '__main__':
 
@@ -463,9 +478,9 @@ if __name__ == '__main__':
 
         max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
 
-        conditions = [f'gloria_transfer_{s}_{TEST_SET}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
-        labels = ['S-GN', 'S-IN', 'S-RN']
-        get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref=f'gloria_transfer_full_gn_{TEST_SET}')
+        # conditions = [f'gloria_transfer_{s}_{TEST_ID}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
+        # labels = ['S-GN', 'S-IN', 'S-RN']
+        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref=f'gloria_transfer_full_gn_{TEST_ID}')
         # plot_sr_av(max_len, experiment_path, 'flat')
         # plot_sr_av_all(max_len, experiment_path)
-        # transfer_get_mean_sr(max_len, experiment_path)
+        transfer_get_mean_sr(max_len, experiment_path)
