@@ -21,14 +21,14 @@ colors = [[0, 0.447, 0.7410], [0.85, 0.325, 0.098],  [0.466, 0.674, 0.188], [0.9
           [0.466, 0.674, 0.8], [0.929, 0.04, 0.125],
           [0.3010, 0.245, 0.33], [0.635, 0.078, 0.184], [0.35, 0.78, 0.504]]
 cmap = plt.get_cmap('tab20b')
-colors = np.array(cmap.colors)[[0, 1, 2, 4, 5, 8, 9, 12, 13, 14, 16, 17, 18]]
+colors = np.array(cmap.colors)[[0, 17, 2, 16, 5, 8, 9, 12, 13, 14, 16, 17, 18]]
 folder = 'rebuttal_results_semantic'
 
 RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/' + folder + '/'
 SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
 TO_PLOT = ['semantic_goals']
 
-NB_CLASSES = 11 # 12 for 5 blocks
+NB_CLASSES = 5 # 12 for 5 blocks
 
 LINE = 'mean'
 ERR = 'std'
@@ -202,18 +202,18 @@ def plot_sr_av(max_len, experiment_path, folder):
 
 
 def plot_sr_av_all(max_len, experiment_path):
-    fig, artists, ax = setup_n_figs(n=2,
-                                   m=2, 
-                                   xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
-                                   ylabels= ['Success Rate', None] * 2,
-                                #    xlabels = ['Episodes (x$10^3$)'] * 3,
-                                #    ylabels = ['Success Rate', None, None],
+    fig, artists, ax = setup_n_figs(n=1,
+                                   m=3, 
+                                #    xlabels=[None, None, 'Episodes (x$10^3$)', 'Episodes (x$10^3$)'],
+                                #    ylabels= ['Success Rate', None] * 2,
+                                   xlabels = ['Episodes (x$10^3$)'] * 3,
+                                   ylabels = ['Success Rate', None, None],
                                    xlims = [[-1, LIM] for _ in range(4)],
                                    ylims= [[-0.02, 1.03] for _ in range(4)]
         )
     # titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-RN', 'Continuous-DS', 'Continuous-Flat']
-    titles = ['S-GN', 'S-IN', 'S-RN', 'S-DS']
-    for k, folder in enumerate(['full_gn', 'interaction_network_2', 'relation_network', 'deep_sets']):
+    titles = ['Continuous-GN', 'Continuous-IN', 'Continuous-DS']
+    for k, folder in enumerate(['continuous_full_gn', 'continuous_interaction_network_2', 'continuous_deep_sets']):
         condition_path = experiment_path + folder + '/'
         list_runs = sorted(os.listdir(condition_path))
         global_sr = np.zeros([len(list_runs), max_len])
@@ -257,10 +257,10 @@ def plot_sr_av_all(max_len, experiment_path):
         ax[k].grid()
         ax[k].set_title(titles[k], fontname='monospace', fontweight='bold')
         ax[k].set_facecolor('whitesmoke')
-    leg = fig.legend(['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$', '$S_4$', '$S_5$', 'Global'],
-                    # ['No Stacks', '$\widetilde{S}_2$', '$\widetilde{S}_3$', '$\widetilde{S}_4$', '$\widetilde{S}_5$', 'Global'],
+    leg = fig.legend(#['$C_1$', '$C_2$', '$C_3$', '$S_2$', '$S_3$', '$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$', '$P_3$ & $S_2$', '$S_4$', '$S_5$', 'Global'],
+                    ['No Stacks', '$\widetilde{S}_2$', '$\widetilde{S}_3$', '$\widetilde{S}_4$', '$\widetilde{S}_5$', 'Global'],
                     loc='upper center',
-                    bbox_to_anchor=(0.525, 1.15),
+                    bbox_to_anchor=(0.525, 1.22),
                     ncol=6,
                     fancybox=True,
                     shadow=True,
@@ -360,7 +360,7 @@ if __name__ == '__main__':
         # labels = ['S-GN', 'S-IN', 'S-RN', 'S-DS', 'S-Flat']
         # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref='full_gn')
         # plot_sr_av(max_len, experiment_path, 'flat')
-        # plot_sr_av_all(max_len, experiment_path)
+        plot_sr_av_all(max_len, experiment_path)
 
 
         # if PLOT == 'Architecture':
