@@ -30,7 +30,7 @@ RESULTS_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/transfer_study
 SAVE_PATH = '/home/ahmed/Documents/final_year/ALOE2022/rlgraph/plots/'
 TO_PLOT = ['transfer_study']
 
-TEST_SET = 2
+TEST_SET = 3
 
 # TEST_CLASSES = [5, 7, 8, 9] if TEST_SET == 2 else [6, 7, 9]
 if TEST_SET == 1:
@@ -41,7 +41,7 @@ elif TEST_SET == 2:
     TEST_CLASSES = [6, 7, 9]
 elif TEST_SET == 3:
     TEST_ID = 2
-    TEST_CLASSES = [5, 7]
+    TEST_CLASSES = [5]
 # TRAIN_CLASSES = [1, 2, 3, 4, 6] if TEST_SET == 2 else [1, 2, 3, 4, 5, 8]
 
 NB_CLASSES = 11 # 12 for 5 blocks
@@ -60,7 +60,7 @@ FREQ = 2
 NB_BUCKETS = 10
 NB_EPS_PER_EPOCH = 2400
 NB_VALID_GOALS = 35
-LAST_EP = 180
+LAST_EP = 150
 LIM = NB_EPS_PER_EPOCH * LAST_EP / 1000 + 5
 line, err_min, err_plus = get_stat_func(line=LINE, err=ERR)
 COMPRESSOR = CompressPDF(4)
@@ -306,7 +306,7 @@ def get_mean_sr(experiment_path, max_len, max_seeds, conditions=None, labels=Non
     sr_per_cond_stats[:, :, 2] = err_plus(sr)
 
     for i, l in enumerate(['GN', 'IN', 'RN']):
-        idx = min(LAST_EP // 5, np.argwhere(np.isnan(line(sr)[i]))[0] - 1)
+        idx = LAST_EP // 5
         last_value = line(sr)[i][idx]
         last_er_m = last_value - err_min(sr)[i][idx]
         last_er_p = err_plus(sr)[i][idx] - last_value
@@ -439,7 +439,8 @@ def transfer_get_mean_sr(max_len, experiment_path):
         av = test_av 
         print(f'Evaluating {folder}')
         for i in range(len(CLASSES)):
-            idx = min(LAST_EP // 5, np.argwhere(np.isnan(line(sr_data_test)[i]))[0] - 1)
+            # idx = min(LAST_EP // 5, np.argwhere(np.isnan(line(sr_data_test)[i]))[0] - 1)
+            idx = LAST_EP // 5
             last_value = line(sr_data_test)[i][idx]
             last_er_m = last_value - err_min(sr_data_test)[i][idx]
             last_er_p = err_plus(sr_data_test)[i][idx] - last_value
@@ -458,7 +459,7 @@ def transfer_get_mean_sr(max_len, experiment_path):
     if TEST_SET == 2:
         test_labels = ['$S_2$ & $S_2$', '$S_2$ & $S_3$', '$P_3$ & $S_2$']
     elif TEST_SET == 3:
-        test_labels = ['$S_3$', '$S_2$ & $S_3$']
+        test_labels = ['$S_3$']
     leg = fig.legend(test_labels + ['Global'],
                     loc='upper center',
                     bbox_to_anchor=(0.525, 1.22),
@@ -478,9 +479,9 @@ if __name__ == '__main__':
 
         max_len, max_seeds, min_len, min_seeds = check_length_and_seeds(experiment_path=experiment_path)
 
-        # conditions = [f'gloria_transfer_{s}_{TEST_ID}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
-        # labels = ['S-GN', 'S-IN', 'S-RN']
-        # get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref=f'gloria_transfer_full_gn_{TEST_ID}')
+        conditions = [f'gloria_transfer_{s}_{TEST_ID}' for s in ['full_gn', 'interaction_network_2', 'relation_network']]
+        labels = ['S-GN', 'S-IN', 'S-RN']
+        get_mean_sr(experiment_path, max_len, max_seeds, conditions, labels, ref=f'gloria_transfer_full_gn_{TEST_ID}')
         # plot_sr_av(max_len, experiment_path, 'flat')
         # plot_sr_av_all(max_len, experiment_path)
-        transfer_get_mean_sr(max_len, experiment_path)
+        # transfer_get_mean_sr(max_len, experiment_path)
